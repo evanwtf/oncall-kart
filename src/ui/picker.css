@@ -60,8 +60,8 @@
 
 .switch-game {
   position: absolute;
-  top: 12px;
-  left: 16px;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: calc(env(safe-area-inset-left, 0px) + 16px);
   min-height: 40px;
   padding: 6px 14px;
   border-radius: 8px;

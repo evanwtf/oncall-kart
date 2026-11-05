@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gameUrl, parseGame, showPicker } from '../src/picker';
 
@@ -73,6 +75,26 @@ describe('showPicker', () => {
     key('KeyA');
     key('Enter');
     expect(open).toHaveBeenLastCalledWith('kart');
+  });
+
+  it('leaves keys with a modifier to the browser', () => {
+    const { open } = setup();
+    for (const mod of ['metaKey', 'ctrlKey', 'altKey'] as const) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD', [mod]: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', [mod]: true }));
+    }
+    expect(open).not.toHaveBeenCalled();
+    // Cmd+D did not move the selection either: plain Enter opens the kart card.
+    key('Enter');
+    expect(open).toHaveBeenCalledWith('kart');
+  });
+
+  it('keeps the Switch game button clear of the notch and the rounded corners', () => {
+    // jsdom gives import.meta.url a non-file scheme: read from the repo root.
+    const css = readFileSync(resolve(process.cwd(), 'src/ui/picker.css'), 'utf8');
+    const rule = /\.switch-game\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/top:\s*calc\(env\(safe-area-inset-top[^;]*\+ 12px\)/);
+    expect(rule).toMatch(/left:\s*calc\(env\(safe-area-inset-left[^;]*\+ 16px\)/);
   });
 
   it('opens a card on a click', () => {

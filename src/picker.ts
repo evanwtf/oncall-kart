@@ -111,6 +111,8 @@ export function showPicker(
 
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat) return;
+    // A browser or system shortcut (Cmd+D, Ctrl+Enter) is not a picker key.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') selected = 0;
     else if (e.code === 'ArrowRight' || e.code === 'KeyD') selected = CARDS.length - 1;
     else if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') {
