@@ -122,6 +122,8 @@ export interface Vendor {
   close: boolean;
   /** Walked on the last step (for the walk bob). */
   walking: boolean;
+  /** The shot that last hit it: more bills of one shot are one hit. */
+  lastHitShot: number;
 }
 
 /**
@@ -193,6 +195,7 @@ export function spawnVendor(s: Shift, role: VendorRole, x: number, z: number): V
     nudgeUntil: 0,
     close: false,
     walking: false,
+    lastHitShot: -1,
   };
   s.vendors.push(v);
   return v;
@@ -241,7 +244,8 @@ function shove(s: Shift, v: Vendor, dx: number, dz: number): void {
 
 /**
  * Walk a vendor toward the goal point of `field` (or (gx, gz) directly when
- * the field gives no direction), at `speed`. Returns true when it walked.
+ * the field gives no direction), at `speed`, and stop `stop` metres short.
+ * Returns true when it walked.
  */
 export function walkVendor(
   s: Shift,
@@ -251,10 +255,11 @@ export function walkVendor(
   gz: number,
   speed: number,
   dt: number,
+  stop: number = SHOOTER_TUNING.vendorStopRange,
 ): boolean {
   const t = SHOOTER_TUNING;
   const dist = Math.hypot(gx - v.x, gz - v.z);
-  if (dist <= t.vendorStopRange) {
+  if (dist <= stop) {
     v.stuckFor = 0;
     v.markX = v.x;
     v.markZ = v.z;
@@ -272,7 +277,7 @@ export function walkVendor(
       DIR.z = (gz - v.z) / dist;
     }
   }
-  const step = Math.min(speed * dt, dist - t.vendorStopRange);
+  const step = Math.min(speed * dt, dist - stop);
   shove(s, v, DIR.x * step, DIR.z * step);
 
   // Stuck: no 0.2 m of progress in 3 s while still far from the goal. A
@@ -357,8 +362,10 @@ export function stepVendors(s: Shift, dt: number, events: ShiftEvent[]): void {
   admit(s, events);
   updatePlayerField(s);
   for (const v of s.vendors) {
-    v.walking = false;
     const g = v.goal;
+    // A vendor on its way to a lure was walked by stepMoney.
+    if (typeof g === 'object' && 'lure' in g && !isDistracted(s, v)) continue;
+    v.walking = false;
     if (typeof g === 'object' && 'alarm' in g && s.time >= g.until) v.goal = 'player';
     if (isDistracted(s, v)) continue;
     const goal = v.goal;

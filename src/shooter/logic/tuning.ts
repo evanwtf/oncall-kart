@@ -72,4 +72,40 @@ export const SHOOTER_TUNING = {
   /** A wrong step calls vendors within alarmRange (m) to the rack for alarmSeconds. */
   alarmRange: 30,
   alarmSeconds: 8,
+
+  // The money gun (phase 2).
+  startBudget: 20000,
+  /** Budget spent per shot. */
+  shotCost: 500,
+  /** Shots per second while the button is held. */
+  fireRate: 4,
+  /** At most this many clicks per second with no budget. */
+  dryFireRate: 2,
+  billsPerShot: 3,
+  /** Spread of the bills either side of the view. */
+  spreadDeg: 4,
+  billSpeed: 25,
+  billRange: 14,
+  /** Bill radius for collision with walls and racks. */
+  billRadius: 0.05,
+  /** A hit distracts for distractSeconds × the role's distractScale. */
+  distractSeconds: 5,
+  /** A lure's life on the floor. */
+  lureSeconds: 10,
+  /** Bills of one shot that land this close (m) to its lure join it. */
+  lureMerge: 1,
+  /** A free vendor within lureRange (m) of a free lure goes for it. */
+  lureRange: 6,
+  /** A vendor this close (m) to its lure picks it up. */
+  lureReach: 0.6,
+  /** Seconds a vendor spends picking up a lure. */
+  pickupSeconds: 2,
+  /** Budget from one approved PO. */
+  poAmount: 5000,
+  /** Seconds before a PO comes back. */
+  poRespawn: 30,
+  /** The player takes a pickup within this distance (m). */
+  pickupRadius: 0.8,
+  /** Step time multiplier with the toolkit. */
+  toolkitScale: 0.7,
 } as const;

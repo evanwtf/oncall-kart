@@ -3,6 +3,7 @@ import { intBetween, makeRng, pick, type Rng } from '../../logic/rng';
 import type { TicketType } from '../../logic/runbooks';
 import { applyStep, issueTicket, type Ticket } from '../../logic/ticket';
 import { breakTimes, shooterSla } from './breaks';
+import { placePickups, stepMoney, type Bill, type Lure, type Pickup } from './money';
 import { FLOOR, solidBoxes, type Box, type FloorDef, type Target } from './floor';
 import { buildNavGrid, flowField, type FlowField, type NavGrid } from './nav';
 import { rollPatches, type Patch } from './patches';
@@ -99,6 +100,21 @@ export interface Shift {
   nextLineAt: number;
   /** Side-steps given to stuck vendors (a debug count). */
   vendorNudges: number;
+
+  // The money gun (phase 2).
+  /** The gun's ammo. Never below 0. */
+  budget: number;
+  bills: Bill[];
+  lures: Lure[];
+  pickups: Pickup[];
+  /** The toolkit is taken: every step is faster. */
+  toolkit: boolean;
+  /** Seconds before the next shot, and before the next dry click. */
+  fireCooldown: number;
+  dryCooldown: number;
+  shotNumber: number;
+  nextBillId: number;
+  nextLureId: number;
 }
 
 export interface ShiftInput {
@@ -110,6 +126,8 @@ export interface ShiftInput {
   work: boolean;
   /** A step picked with a number key this tick. */
   pick: Step | null;
+  /** The fire button is held. Absent = not held. */
+  fire?: boolean;
 }
 
 export type ShiftEvent =
@@ -123,7 +141,13 @@ export type ShiftEvent =
   | { type: 'sla-breach'; rackId: string }
   | { type: 'shift-end'; ending: Ending }
   | { type: 'vendor-arrived'; id: number; role: VendorRole }
-  | { type: 'vendor-close'; id: number; role: VendorRole; line: string };
+  | { type: 'vendor-close'; id: number; role: VendorRole; line: string }
+  | { type: 'fired' }
+  | { type: 'dry-fire' }
+  | { type: 'vendor-distracted'; id: number; role: VendorRole }
+  | { type: 'lure-dropped'; id: number }
+  | { type: 'lure-taken'; id: number; vendorId: number }
+  | { type: 'picked-up'; kind: 'po' | 'toolkit' };
 
 /** Slack for float sums of fixed steps: 1/120 does not add up exactly. */
 const EPS = 1e-9;
@@ -178,6 +202,16 @@ export function createShift(seed: number, floor: FloorDef = FLOOR): Shift {
     alarmFields: new Map(),
     nextLineAt: 0,
     vendorNudges: 0,
+    budget: SHOOTER_TUNING.startBudget,
+    bills: [],
+    lures: [],
+    pickups: placePickups(vendorRng, floor, nav),
+    toolkit: false,
+    fireCooldown: 0,
+    dryCooldown: 0,
+    shotNumber: 0,
+    nextBillId: 0,
+    nextLureId: 0,
   };
   updatePlayerField(s);
   return s;
@@ -325,14 +359,16 @@ function complete(s: Shift, w: Work, events: ShiftEvent[]): void {
 /** Duration of the work a target needs now, or null when there is nothing to do. */
 function workFor(s: Shift, t: Target): Work | null {
   const T = SHOOTER_TUNING;
+  // The toolkit makes every step faster for the rest of the shift.
+  const scale = s.toolkit ? T.toolkitScale : 1;
   if (openAt(s, t.id)) {
     const sel = s.selected;
     if (sel === null || sel.rackId !== t.id) return null;
-    const duration = sel.step === 'PIT' ? T.handsOnSeconds : T.opSeconds;
+    const duration = (sel.step === 'PIT' ? T.handsOnSeconds : T.opSeconds) * scale;
     return { targetId: t.id, step: sel.step, progress: 0, duration };
   }
   if (unappliedAt(s, t.id)) {
-    return { targetId: t.id, step: null, progress: 0, duration: T.patchSeconds };
+    return { targetId: t.id, step: null, progress: 0, duration: T.patchSeconds * scale };
   }
   return null;
 }
@@ -378,6 +414,7 @@ export function stepShift(s: Shift, input: ShiftInput, dt: number): ShiftEvent[]
     stepPlayer(s.player, input.move, dt, s.boxes, factor);
   }
 
+  stepMoney(s, input, dt, events);
   stepVendors(s, dt, events);
 
   for (const o of s.open) {
