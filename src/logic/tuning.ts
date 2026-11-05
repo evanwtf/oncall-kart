@@ -89,6 +89,8 @@ export const TUNING = {
   pageSeekLife: 15,
   /** How fast (m/s) a Page closes the lateral gap to its target. */
   pageTurn: 20,
+  /** Largest lateral gap (m) at which a Page hits its target. */
+  pageHitGap: 2,
   /** A puddle lands this far (m) behind the thrower. */
   spillOffset: 3,
   spillLife: 25,

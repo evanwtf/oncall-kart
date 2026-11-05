@@ -571,3 +571,29 @@ describe('results snapshot (Review Focus 3)', () => {
     expect(r.finalOrder).toEqual(shown);
   });
 });
+
+describe('a kart that crosses the line with the player', () => {
+  it('ranks by finishedAt in the snapshot, and drops its shield', () => {
+    const r = newRace(1, 1, 2);
+    toGo(r);
+    r.time = 50;
+    const [p, a, b] = r.karts;
+    if (!p || !a || !b) throw new Error('karts');
+    const L = track.length;
+    // a crosses in the same substep as the player. b is nearer the line but held.
+    const put = (k: typeof p, s: number, lateral: number, speed: number) => {
+      k.kart = { ...spawnKart(track, s, lateral), speed };
+      k.proj = { s, lateral };
+      k.lap = { ...k.lap, sector: 3 };
+    };
+    put(p, L - 0.05, 0, 15);
+    put(a, L - 0.05, -5, 15);
+    put(b, L - 0.02, 5, 0);
+    b.kart = { ...b.kart, holdTime: 99 };
+    a.shieldTime = 3;
+    stepRace(r, [GAS], 1 / 120);
+    expect(p.finishedAt).toBe(a.finishedAt);
+    expect(r.finalOrder).toEqual([0, 1, 2]);
+    expect(a.shieldTime).toBe(0);
+  });
+});

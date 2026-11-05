@@ -183,9 +183,11 @@ export function stepProjectiles(race: Race, h: number, events: RaceEvent[]): voi
       const turn = TUNING.pageTurn * h;
       const d = target.proj.lateral - pg.lateral;
       pg.lateral += Math.max(-turn, Math.min(turn, d));
-      // It homes: reaching the target, or passing it this substep, is a hit.
+      // It homes: reaching the target, or passing it this substep, within
+      // TUNING.pageHitGap across, is a hit.
       const ahead = wrapS(target.proj.s - pg.s, L);
-      if (ahead <= TUNING.kartRadius || ahead >= L - pg.speed * h - TUNING.kartRadius) {
+      const along = ahead <= TUNING.kartRadius || ahead >= L - pg.speed * h - TUNING.kartRadius;
+      if (along && Math.abs(target.proj.lateral - pg.lateral) <= TUNING.pageHitGap) {
         hitKart(target, 'page', pg.ownerId, events);
         continue;
       }

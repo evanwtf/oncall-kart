@@ -113,20 +113,23 @@ function avoidCables(race: Race, k: KartRuntime, lateral: number, profile: BotPr
   return out;
 }
 
-/** The lateral offset the bot wants for the pit, or null when it does not need the pit. */
+/**
+ * The lateral offset the bot wants for the pit, or null for the road. A bot
+ * in the walled part of the lane stays in it until the exit opening, served
+ * or not, so it never steers into the divider.
+ */
 function pitLateral(race: Race, k: KartRuntime): number | null {
   const { pit, halfWidth } = race.track.def;
-  if (nextStep(k.ticket) !== 'PIT' || k.pitServedTicket === k.ticket.number) return null;
   const s = k.proj.s;
-  const L = race.track.length;
-  const toEntry = wrapS(pit.startS - s, L);
   const lane = pit.side * pit.centerOffset;
+  const inLane = k.proj.lateral * pit.side > halfWidth;
+  const walled = s > pit.startS + pit.entryLen && s < pit.endS - pit.exitLen;
+  if (inLane && walled) return lane;
+  if (nextStep(k.ticket) !== 'PIT' || k.pitServedTicket === k.ticket.number) return null;
+  const toEntry = wrapS(pit.startS - s, race.track.length);
   // Approach: line up on the pit side of the road, then turn in at the opening.
   if (toEntry > 0 && toEntry <= TUNING.botPitLookahead) return pit.side * (halfWidth - 2);
   if (s >= pit.startS && s <= pit.startS + pit.entryLen) return lane;
-  // Past the opening: stay in the lane only if the kart is in it.
-  const inLane = k.proj.lateral * pit.side > halfWidth;
-  if (s > pit.startS + pit.entryLen && s < pit.endS - pit.exitLen && inLane) return lane;
   return null;
 }
 

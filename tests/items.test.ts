@@ -241,8 +241,17 @@ describe('Page', () => {
     expect(r.projectiles[0]?.s ?? 0).toBeGreaterThan(300 + TUNING.pageSpeed * 0.9);
     ev.push(...run(r, TUNING.pageLife));
     expect(r.projectiles).toHaveLength(0);
-    // It never hits its own thrower, even after a lap.
     expect(ev.filter((e) => e.type === 'hit')).toEqual([]);
+    // A long-lived Page with no target laps the hall: it passes its thrower
+    // and the bot, and hits neither.
+    p.item = 'page';
+    useItem(r, 0);
+    const long = r.projectiles[0];
+    if (!long) throw new Error('page');
+    long.life = (1.5 * track.length) / TUNING.pageSpeed;
+    const lap = run(r, long.life + 0.1);
+    expect(lap.filter((e) => e.type === 'hit')).toEqual([]);
+    expect(r.projectiles).toHaveLength(0);
   });
 
   it('has no target when the kart ahead finished', () => {
@@ -254,6 +263,37 @@ describe('Page', () => {
     p.item = 'page';
     useItem(r, 0);
     expect(r.projectiles[0]?.targetId).toBeNull();
+  });
+});
+
+describe('Page lateral gap', () => {
+  it('misses a target more than pageHitGap across, and hits one inside it', () => {
+    for (const [gap, hits] of [
+      [TUNING.pageHitGap + 0.5, 0],
+      [TUNING.pageHitGap - 0.5, 1],
+    ] as const) {
+      const r = racing(1);
+      const p = kartOf(r, 0);
+      const bot = kartOf(r, 1);
+      // The thrower sits well aside, so no kart contact moves the target.
+      place(p, 290, -6);
+      place(bot, 300.5, 2);
+      bot.kart = { ...bot.kart, holdTime: 99 };
+      bot.lap = { ...bot.lap, completed: 1 };
+      p.kart = { ...p.kart, holdTime: 99 };
+      r.projectiles.push({
+        id: 50,
+        ownerId: 0,
+        targetId: 1,
+        s: 299.9,
+        lateral: bot.proj.lateral + gap,
+        speed: TUNING.pageSpeed,
+        life: 2,
+      });
+      // One substep: no time to home in.
+      const ev = run(r, STEP).filter((e) => e.type === 'hit');
+      expect(ev).toHaveLength(hits);
+    }
   });
 });
 

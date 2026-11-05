@@ -280,6 +280,7 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
   // 3. Rules: laps, gates, pit, SLA, respawn. A reshuffle waits for the end of
   // the substep, so every kart in this substep sees the same board.
   const passedRows: number[] = [];
+  let playerFinished = false;
   race.karts.forEach((k, i) => {
     const prev = prevProj[i] as Projection;
     const input = kartInputs[i] as KartInput;
@@ -293,12 +294,10 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
       events.push({ type: 'lap', kartId: k.id, completed: lap.state.completed, lapTime });
       if (lap.state.completed >= race.config.laps && k.finishedAt === null) {
         k.finishedAt = race.time;
+        // A finished kart keeps no shield: it races no more.
+        k.shieldTime = 0;
         events.push({ type: 'finished', kartId: k.id, time: race.time });
-        if (k.id === race.playerId) {
-          race.phase = 'finished';
-          // The results show this order; karts that finish later do not change it.
-          race.finalOrder = standings(race);
-        }
+        if (k.id === race.playerId) playerFinished = true;
       }
     }
     k.lap = lap.state;
@@ -370,6 +369,14 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
     }
     updateRubberBand(race, k, h);
   });
+
+  // The results show this order; karts that finish later do not change it.
+  // It waits for the whole substep, so a kart that crosses with the player
+  // ranks by its finish time too.
+  if (playerFinished) {
+    race.phase = 'finished';
+    race.finalOrder = standings(race);
+  }
 
   // 4. Pages fly; puddles dry up.
   stepProjectiles(race, h, events);

@@ -244,3 +244,14 @@ describe('scraping along a wall', () => {
     expect(k.speed).toBeGreaterThan(12);
   });
 });
+
+describe('surfaces at the wall faces', () => {
+  it('reads a kart a hair outside a face as on that surface, not off-road', () => {
+    const { pit, halfWidth } = HALL;
+    const s = (pit.startS + pit.endS) / 2;
+    const inner = pit.side * (pit.centerOffset - pit.halfWidth - 1e-4);
+    expect(surfaceAt({ s, lateral: inner }, track)).toBe('pit');
+    expect(surfaceAt({ s: 300, lateral: halfWidth + 1e-4 }, track)).toBe('road');
+    expect(surfaceAt({ s: 300, lateral: halfWidth + 0.01 }, track)).toBe('offroad');
+  });
+});

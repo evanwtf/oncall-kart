@@ -145,11 +145,28 @@ describe('bots and the pit (Review Focus 4)', () => {
     bot.lap = { ...bot.lap, sector: 3 };
     const events: RaceEvent[] = [];
     let inPitLane = 0;
+    let servedAt: number | null = null;
+    let exitAt: number | null = null;
+    const exitOpening = HALL.pit.endS - HALL.pit.exitLen;
+    const surfacesAfterBox = new Set<string>();
     for (let i = 0; i < 20 * 120; i++) {
-      events.push(...stepRace(r, [NO_INPUT], 1 / 120));
-      if (surfaceAt(bot.proj, track) === 'pit') inPitLane += 1 / 120;
+      const ev = stepRace(r, [NO_INPUT], 1 / 120);
+      events.push(...ev);
+      if (ev.some((e) => e.type === 'pit-service' && e.kartId === 2)) servedAt = r.time;
+      const surface = surfaceAt(bot.proj, track);
+      if (surface === 'pit') inPitLane += 1 / 120;
+      if (servedAt !== null && exitAt === null) {
+        if (bot.proj.s >= exitOpening) exitAt = r.time;
+        else surfacesAfterBox.add(surface);
+      }
       if (bot.proj.s > HALL.pit.endS + 40 && bot.proj.s < 300) break;
     }
+    // From the box to the exit opening: in the lane all the way (the hold
+    // included), never on the divider or off the road.
+    expect(servedAt).not.toBeNull();
+    expect(exitAt).not.toBeNull();
+    expect((exitAt as number) - (servedAt as number)).toBeLessThan(4);
+    expect([...surfacesAfterBox]).toEqual(['pit']);
     expect(events).toContainEqual(expect.objectContaining({ type: 'pit-service', kartId: 2 }));
     expect(bot.ticket.stepIndex).toBe(2);
     // It left the pit lane and drives on, with no respawn.

@@ -199,17 +199,23 @@ export function stepKart(
 /** True when s lies in [startS, endS]. The pit does not cross s = 0. */
 const inSpan = (s: number, a: number, b: number) => s >= a && s <= b;
 
+/**
+ * Slack (m) at the wall faces. A kart pushed onto a face re-projects a hair
+ * outside it (9.9999 for 10); that must not read as off-road.
+ */
+const FACE_EPS = 1e-3;
+
 export function surfaceAt(p: Projection, track: Track): Surface {
   const { halfWidth, pit } = track.def;
   const side = p.lateral * pit.side;
   if (
     inSpan(p.s, pit.startS, pit.endS) &&
-    side >= pit.centerOffset - pit.halfWidth &&
-    side <= pit.centerOffset + pit.halfWidth
+    side >= pit.centerOffset - pit.halfWidth - FACE_EPS &&
+    side <= pit.centerOffset + pit.halfWidth + FACE_EPS
   ) {
     return 'pit';
   }
-  if (Math.abs(p.lateral) > halfWidth) return 'offroad';
+  if (Math.abs(p.lateral) > halfWidth + FACE_EPS) return 'offroad';
   const ice = track.def.hazards?.some((h) => h.kind === 'ice' && inPatch(h, p, track.length));
   return ice ? 'ice' : 'road';
 }
