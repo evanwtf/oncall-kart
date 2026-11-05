@@ -44,4 +44,32 @@ export const SHOOTER_TUNING = {
   navCell: 0.5,
   /** A vendor's radius for collision with walls and racks. */
   vendorRadius: 0.3,
+  /** Most vendors on the floor at once. An arrival beyond it waits. */
+  maxVendors: 20,
+  /** Vendors that arrive in one shift. */
+  vendorArrivals: 16,
+  /** Earliest and latest time of the first arrival. */
+  firstArrivalMin: 12,
+  firstArrivalMax: 18,
+  /** No arrival after this time. */
+  lastArrival: 165,
+  /** A vendor this close (m) to the player slows the player (Evan's rule). */
+  closeRange: 2,
+  /** Speed taken off per close vendor, and the floor it stops at. */
+  slowPerVendor: 0.2,
+  slowFloor: 0.1,
+  /** Inside this distance (m) of its goal a vendor stops walking. */
+  vendorStopRange: 1,
+  /** Gap (m) a vendor keeps from other vendors and from the player. */
+  vendorGap: 0.6,
+  /** A step without this much progress (m) in vendorStuckSeconds gets a nudge. */
+  vendorStuckProgress: 0.2,
+  vendorStuckSeconds: 3,
+  /** How long (s) a nudge side-steps a stuck vendor. */
+  vendorNudgeSeconds: 0.6,
+  /** Shortest time (s) between two vendor lines. */
+  vendorLineGap: 3,
+  /** A wrong step calls vendors within alarmRange (m) to the rack for alarmSeconds. */
+  alarmRange: 30,
+  alarmSeconds: 8,
 } as const;

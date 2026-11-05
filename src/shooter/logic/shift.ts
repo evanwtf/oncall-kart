@@ -4,9 +4,20 @@ import type { TicketType } from '../../logic/runbooks';
 import { applyStep, issueTicket, type Ticket } from '../../logic/ticket';
 import { breakTimes, shooterSla } from './breaks';
 import { FLOOR, solidBoxes, type Box, type FloorDef, type Target } from './floor';
+import { buildNavGrid, flowField, type FlowField, type NavGrid } from './nav';
 import { rollPatches, type Patch } from './patches';
 import { stepPlayer, type MoveInput, type Player } from './player';
 import { SHOOTER_TUNING } from './tuning';
+import {
+  closeVendors,
+  slowFactor,
+  soundAlarm,
+  stepVendors,
+  updatePlayerField,
+  vendorArrivals,
+  type Vendor,
+  type VendorRole,
+} from './vendors';
 
 /** The steps on the rack panel. Number key n picks PANEL_STEPS[n - 1]. */
 export const PANEL_STEPS: readonly Step[] = [...OPS, 'PIT'];
@@ -40,6 +51,9 @@ export interface ShiftStats {
   slaBreaches: number;
   wrongSteps: number;
   patchesApplied: number;
+  /** Hits on vendors and lures taken. */
+  vendorsDistracted: number;
+  moneySpent: number;
 }
 
 export interface Shift {
@@ -65,6 +79,26 @@ export interface Shift {
   boxes: Box[];
   /** Racks and devices by id. */
   targets: Map<string, Target>;
+
+  // Vendors (phase 2).
+  vendors: Vendor[];
+  /** Vendors' own random source, derived from the seed: phase 1 draws stay the same. */
+  vendorRng: Rng;
+  /** Arrival times, ascending. */
+  arrivals: { time: number; role: VendorRole }[];
+  /** Index of the next arrival. */
+  nextArrival: number;
+  nextVendorId: number;
+  nav: NavGrid;
+  /** The field toward the player, rebuilt when the player enters a new cell. */
+  playerField: FlowField;
+  playerCell: number;
+  /** The field toward each alarmed rack, built once per alarm. */
+  alarmFields: Map<string, FlowField>;
+  /** No vendor line before this time. */
+  nextLineAt: number;
+  /** Side-steps given to stuck vendors (a debug count). */
+  vendorNudges: number;
 }
 
 export interface ShiftInput {
@@ -87,16 +121,23 @@ export type ShiftEvent =
   | { type: 'patch-applied'; patchId: string }
   | { type: 'work-cancelled'; targetId: string }
   | { type: 'sla-breach'; rackId: string }
-  | { type: 'shift-end'; ending: Ending };
+  | { type: 'shift-end'; ending: Ending }
+  | { type: 'vendor-arrived'; id: number; role: VendorRole }
+  | { type: 'vendor-close'; id: number; role: VendorRole; line: string };
 
 /** Slack for float sums of fixed steps: 1/120 does not add up exactly. */
 const EPS = 1e-9;
+
+/** Salt for the vendors' seed, so their draws never touch the phase 1 stream. */
+const VENDOR_SALT = 0x6a09e667;
 
 export function createShift(seed: number, floor: FloorDef = FLOOR): Shift {
   const rng = makeRng(seed);
   const schedule = breakTimes(rng);
   const patches = rollPatches(rng, floor);
-  return {
+  const vendorRng = makeRng((seed ^ VENDOR_SALT) >>> 0);
+  const nav = buildNavGrid(floor, SHOOTER_TUNING.navCell, SHOOTER_TUNING.vendorRadius);
+  const s: Shift = {
     time: 0,
     floor,
     player: {
@@ -111,7 +152,14 @@ export function createShift(seed: number, floor: FloorDef = FLOOR): Shift {
     patches,
     selected: null,
     work: null,
-    stats: { ticketsClosed: 0, slaBreaches: 0, wrongSteps: 0, patchesApplied: 0 },
+    stats: {
+      ticketsClosed: 0,
+      slaBreaches: 0,
+      wrongSteps: 0,
+      patchesApplied: 0,
+      vendorsDistracted: 0,
+      moneySpent: 0,
+    },
     ended: null,
     rng,
     schedule,
@@ -119,7 +167,20 @@ export function createShift(seed: number, floor: FloorDef = FLOOR): Shift {
     ticketNumber: 0,
     boxes: solidBoxes(floor),
     targets: new Map([...floor.racks, ...floor.devices].map((t) => [t.id, t])),
+    vendors: [],
+    vendorRng,
+    arrivals: vendorArrivals(vendorRng),
+    nextArrival: 0,
+    nextVendorId: 0,
+    nav,
+    playerField: flowField(nav, floor.spawn.x, floor.spawn.z),
+    playerCell: -1,
+    alarmFields: new Map(),
+    nextLineAt: 0,
+    vendorNudges: 0,
   };
+  updatePlayerField(s);
+  return s;
 }
 
 /** The yaw that looks from one point toward another. */
@@ -250,6 +311,7 @@ function complete(s: Shift, w: Work, events: ShiftEvent[]): void {
     s.stats.wrongSteps += 1;
     events.push({ type: 'step-wrong', rackId: w.targetId, step: w.step });
     events.push({ type: 'alarm', rackId: w.targetId });
+    soundAlarm(s, w.targetId);
     return;
   }
   events.push({ type: 'step-ok', rackId: w.targetId, step: w.step });
@@ -304,15 +366,19 @@ export function stepShift(s: Shift, input: ShiftInput, dt: number): ShiftEvent[]
     }
   }
   if (!s.work && input.work && !moving && facing) s.work = workFor(s, facing);
+  // Evan's rule: close vendors slow both the walk and the work bar.
+  const factor = slowFactor(closeVendors(s));
   if (s.work) {
-    s.work.progress += dt;
+    s.work.progress += dt * factor;
     // Feet planted: speed left over from walking does not carry the player off.
     s.player.vx = 0;
     s.player.vz = 0;
     if (s.work.progress >= s.work.duration - EPS) complete(s, s.work, events);
   } else {
-    stepPlayer(s.player, input.move, dt, s.boxes);
+    stepPlayer(s.player, input.move, dt, s.boxes, factor);
   }
+
+  stepVendors(s, dt, events);
 
   for (const o of s.open) {
     if (!o.breached && s.time >= o.ticket.deadline - EPS) {

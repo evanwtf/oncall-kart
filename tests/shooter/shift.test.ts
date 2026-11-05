@@ -455,9 +455,10 @@ describe('the end of the shift', () => {
     b.applied = true;
     s.stats.patchesApplied = 2;
     stand(s, c.targetId);
-    // Skip ahead so the patch fills exactly on the last tick, and stop the breaks.
+    // Skip ahead so the patch fills exactly on the last tick, and stop the breaks and the vendors.
     s.time = T.shiftSeconds - T.patchSeconds;
     s.nextBreak = s.schedule.length;
+    s.nextArrival = s.arrivals.length;
     const events = run(s, ticks(T.patchSeconds), () => ({ work: true }));
     expect(types(events)).toEqual(['patch-applied', 'shift-end']);
     expect(s.ended).toBe('clean');

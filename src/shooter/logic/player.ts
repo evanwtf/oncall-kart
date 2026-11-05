@@ -27,7 +27,8 @@ const SKIN = 1e-6;
  * moves on its own and stops at the first face it meets (a swept test, so a
  * long move cannot tunnel through a thin wall). A diagonal move into a wall
  * keeps its component along the wall. The circle is treated as its square,
- * which is enough for walls and racks.
+ * which is enough for walls and racks. With `out`, the result goes there and
+ * no object is allocated.
  */
 export function moveWithCollision(
   p: { x: number; z: number },
@@ -35,6 +36,7 @@ export function moveWithCollision(
   dz: number,
   radius: number,
   boxes: readonly Box[],
+  out: { x: number; z: number } = { x: 0, z: 0 },
 ): { x: number; z: number } {
   let x = p.x;
   let z = p.z;
@@ -66,11 +68,22 @@ export function moveWithCollision(
     }
     z = nz;
   }
-  return { x, z };
+  out.x = x;
+  out.z = z;
+  return out;
 }
 
-/** One fixed step of walking: accelerate toward the input velocity, then move with collision. */
-export function stepPlayer(p: Player, input: MoveInput, dt: number, boxes: readonly Box[]): void {
+/**
+ * One fixed step of walking: accelerate toward the input velocity, then move
+ * with collision. speedScale scales the top speed (the vendor slowdown).
+ */
+export function stepPlayer(
+  p: Player,
+  input: MoveInput,
+  dt: number,
+  boxes: readonly Box[],
+  speedScale = 1,
+): void {
   const t = SHOOTER_TUNING;
   let f = Math.max(-1, Math.min(1, input.forward));
   let s = Math.max(-1, Math.min(1, input.strafe));
@@ -82,8 +95,9 @@ export function stepPlayer(p: Player, input: MoveInput, dt: number, boxes: reado
   const sin = Math.sin(p.yaw);
   const cos = Math.cos(p.yaw);
   // Forward is (-sin, -cos); right is (cos, -sin).
-  const tx = (-sin * f + cos * s) * t.runSpeed;
-  const tz = (-cos * f - sin * s) * t.runSpeed;
+  const top = t.runSpeed * speedScale;
+  const tx = (-sin * f + cos * s) * top;
+  const tz = (-cos * f - sin * s) * top;
   const ex = tx - p.vx;
   const ez = tz - p.vz;
   const gap = Math.hypot(ex, ez);
