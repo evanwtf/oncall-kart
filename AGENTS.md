@@ -58,9 +58,8 @@ uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
   the shift, vendors, the money gun, the flow field in `nav.ts`); `render/`
   is the three.js scene, with the vendors and the props in their own
   files; `ui/` holds the screens and the HUD; `game.ts` is the loop and the
-  debug hooks. It imports the shared
-  pieces (`ops.ts`, `runbooks.ts`, `ticket.ts`, `rng.ts`) from `src/logic/`
-  and never copies them.
+  debug hooks. It imports the shared pieces (`ops.ts`, `runbooks.ts`,
+  `ticket.ts`, `rng.ts`) from `src/logic/` and never copies them.
 - `tests/`: Vitest, one file per logic module; `tests/shooter/` for Zero
   Down. `e2e/`: Playwright.
 - `scripts/`: repo guards, tested in `tests/`.
