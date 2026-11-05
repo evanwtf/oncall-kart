@@ -55,8 +55,10 @@ uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
 - `src/logic/runbooks.ts`: the ticket types, for both games. Anyone can edit
   it.
 - `src/shooter/`: Zero Down. `logic/` is its pure logic (floor, movement,
-  the shift); `render/` is the three.js scene; `ui/` holds the screens and
-  the HUD; `game.ts` is the loop and the debug hooks. It imports the shared
+  the shift, vendors, the money gun, the flow field in `nav.ts`); `render/`
+  is the three.js scene, with the vendors and the props in their own
+  files; `ui/` holds the screens and the HUD; `game.ts` is the loop and the
+  debug hooks. It imports the shared
   pieces (`ops.ts`, `runbooks.ts`, `ticket.ts`, `rng.ts`) from `src/logic/`
   and never copies them.
 - `tests/`: Vitest, one file per logic module; `tests/shooter/` for Zero

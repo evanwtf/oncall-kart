@@ -275,3 +275,123 @@ test('the start screen opens the shooter, and the briefing goes back to it', asy
   await expect(page.locator('button[data-game]')).toHaveCount(2);
   expect(errors).toEqual([]);
 });
+
+const speedFactor = (page: Page) =>
+  page.evaluate(() => (window.__oncallShooter as ShooterHooks).speedFactor());
+const budget = (page: Page) =>
+  page.evaluate(() => (window.__oncallShooter as ShooterHooks).budget());
+
+test('vendors arrive from the dock', async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  // Jump to 9 s: the first vendor comes at 12-18 s.
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).setClockLeft?.(180 - 9));
+  await expect
+    .poll(() => page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors().length), {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(0);
+  const left = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).clockLeft());
+  // By 30 s into the shift.
+  expect(180 - left).toBeLessThanOrEqual(30);
+  const v = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors()[0]);
+  expect(v?.x ?? 0).toBeGreaterThan(90);
+  expect(errors).toEqual([]);
+});
+
+test('three close vendors slow you to 40%; the money gun frees you', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  // Three vendors 1.5 m in front of the player, in the break room.
+  await page.evaluate(() => {
+    const h = window.__oncallShooter as ShooterHooks;
+    const p = h.player();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    for (const side of [-0.6, 0, 0.6]) {
+      h.spawnVendor?.('renewal-rep', p.x + fx * 1.5 - fz * side, p.z + fz * 1.5 + fx * side);
+    }
+  });
+  await expect.poll(() => speedFactor(page)).toBeCloseTo(0.4, 9);
+  await expect(page.locator('.zd-speed')).toHaveText('Speed 40% · 3 vendors close');
+
+  // Aim at each vendor that is not distracted, and hold fire.
+  const startLeft = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).clockLeft());
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).fire?.(true));
+  try {
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const h = window.__oncallShooter as ShooterHooks;
+            const v = h.vendors().find((x) => !x.distracted);
+            if (v) h.lookAt?.(v.x, v.z);
+            return h.speedFactor();
+          }),
+        { timeout: 20_000, intervals: [16, 33, 50] },
+      )
+      .toBe(1);
+  } finally {
+    await page.evaluate(() => (window.__oncallShooter as ShooterHooks).fire?.(false));
+  }
+  const endLeft = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).clockLeft());
+  // Within 2 s of shift time.
+  expect(startLeft - endLeft).toBeLessThanOrEqual(2);
+  expect(await budget(page)).toBeLessThan(20000);
+  const vendors = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors());
+  expect(vendors.every((v) => v.distracted)).toBe(true);
+  expect((await stats(page))?.vendorsDistracted).toBeGreaterThanOrEqual(3);
+  await expect(page.locator('.zd-speed')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('with no budget the gun only clicks', async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).setBudget?.(0));
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).fire?.(true));
+  await page.waitForTimeout(500);
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).fire?.(false));
+  expect(await budget(page)).toBe(0);
+  expect((await stats(page))?.moneySpent).toBe(0);
+  await expect(page.locator('.zd-budget')).toHaveText('$0');
+  await expect(page.locator('.zd-budget')).toHaveClass(/empty/);
+  expect(errors).toEqual([]);
+});
+
+test('20 vendors and the gun stay within the draw-call budget', async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  await page.evaluate(() => {
+    const h = window.__oncallShooter as ShooterHooks;
+    const roles = [
+      'account-exec',
+      'renewal-rep',
+      'license-auditor',
+      'support-agent',
+      'solutions-architect',
+    ] as const;
+    for (let i = 0; i < 20; i++)
+      h.spawnVendor?.(roles[i % 5] ?? 'renewal-rep', 9 + (i % 5), 15 + Math.floor(i / 5) * 1.5);
+    h.lookAt?.(11, 17);
+    h.fire?.(true);
+  });
+  await page.waitForTimeout(500);
+  await twoFrames(page);
+  const info = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).renderInfo());
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).fire?.(false));
+  const n = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors().length);
+  expect(n).toBe(20);
+  test
+    .info()
+    .annotations.push({ type: 'renderInfo-20-vendors', description: JSON.stringify(info) });
+  console.log(`renderInfo with 20 vendors (${test.info().project.name}): ${JSON.stringify(info)}`);
+  expect(info.calls).toBeGreaterThan(0);
+  expect(info.calls).toBeLessThan(150);
+  expect(errors).toEqual([]);
+});

@@ -7,7 +7,8 @@ Two browser games about being on call:
   gates in runbook order.
 - **Zero Down**, a first-person shift on a data-centre floor. Servers break
   at random. You walk to each broken rack and work through its runbook, and
-  you apply every security patch before the shift ends.
+  you apply every security patch before the shift ends. Vendors crowd you,
+  and a money gun keeps them busy.
 
 ## Bootstrap
 
@@ -92,6 +93,7 @@ Click to start: the game takes the mouse, and Esc gives it back.
 | ---------------- | ------------------------------- |
 | W A S D / arrows | Move and strafe                 |
 | Mouse            | Look                            |
+| Left click       | Fire the money gun              |
 | 1-9              | Pick a step at a broken rack    |
 | E (hold)         | Work: a runbook step or a patch |
 | P / Esc          | Pause                           |
@@ -101,7 +103,36 @@ with the next step in color. Face the rack, pick the step with its number
 key, then hold E until the bar fills. If you move or let go, the step
 stops. A wrong step fills the bar, then fails. A patch target has a blue
 marker: face it and hold E. The floor map (bottom right) shows you, the
-broken racks in red and the patch targets in blue.
+broken racks in red, the patch targets in blue, vendors in orange and
+approved POs in green.
+
+#### Vendors
+
+Vendors walk in from the loading dock, more as the shift goes on: an
+account exec, a renewal rep, a license auditor, a support agent and a
+solutions architect. They walk to you. A wrong step sets off an alarm that
+calls the vendors within 30 m to that rack for 8 s.
+
+Each vendor within 2 m takes 20 points off your speed, down to 10%:
+
+| Vendors close by | Your speed and work rate |
+| ---------------- | ------------------------ |
+| 0                | 100%                     |
+| 1                | 80%                      |
+| 2                | 60%                      |
+| 3                | 40%                      |
+| 4                | 20%                      |
+| 5 or more        | 10%                      |
+
+The slowdown applies to the work bar too. You can always walk through
+vendors, and your speed comes back as soon as you get clear.
+
+The money gun fires bills. Each shot costs $500 of the shift's $20,000
+budget. A vendor that is hit stops to pick up the money for 5 s (the
+license auditor, 2 s). Bills that miss land on the floor, and a vendor
+that walks past stops to pick them up. With no budget, the gun clicks. An
+approved PO on the floor adds $5,000 and comes back after 30 s. One
+toolkit per shift, in a data hall, makes every step faster.
 
 At 0:00 the shift ends:
 

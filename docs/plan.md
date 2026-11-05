@@ -39,5 +39,6 @@ A second game on the same site. The design is in
    shift, the endings and the shift report. Shipped in 0.5.0. Plan:
    [superpowers/plans/2026-11-05-oncall-shooter-phase1.md](superpowers/plans/2026-11-05-oncall-shooter-phase1.md).
 2. **Vendors and the money gun:** vendor roles, the slowdown, the gun,
-   budget, lures, alarms, the toolkit.
+   budget, lures, alarms, the toolkit. Shipped in 0.6.0. Plan:
+   [superpowers/plans/2026-11-05-oncall-shooter-phase2.md](superpowers/plans/2026-11-05-oncall-shooter-phase2.md).
 3. **Sound, touch and polish.**

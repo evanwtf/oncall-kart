@@ -66,6 +66,8 @@ export interface ShooterHooks {
   setBudget?(n: number): void;
   /** Only with ?debug=1: hold the fire button (true) or let go (false), as the mouse does. */
   fire?(on: boolean): void;
+  /** Only with ?debug=1: turn the view to look at a point on the floor. */
+  lookAt?(x: number, z: number): void;
   /** Only with ?debug=1: stand 0.8 m in front of a target, looking at it. */
   faceTarget?(id: string): void;
   /** Only with ?debug=1: break a rack now with a ticket of this type. */
@@ -403,6 +405,11 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     };
     hooks.fire = (on: boolean) => {
       heldFire = on;
+    };
+    hooks.lookAt = (x: number, z: number) => {
+      const yaw = yawToward(shift.player.x, shift.player.z, x, z);
+      shift.player.yaw = yaw;
+      input.setView(yaw, 0);
     };
   }
 }

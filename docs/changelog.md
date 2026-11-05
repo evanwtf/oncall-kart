@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.0
+
+Zero Down, phase 2 ("vendors and the money gun").
+
+- Vendors walk in from the loading dock: 16 a shift, the first at about
+  15 s, closer together as the shift goes on. There are five job roles,
+  each with its own speed, colour, prop and lines. No vendor is a real
+  company or person.
+- Evan's rule: each vendor within 2 m takes 20 points off your speed, down
+  to a floor of 10%. The slowdown applies to the work bar too. A distracted
+  vendor does not count, and you can always walk through vendors. The HUD
+  shows "Speed 40% · 3 vendors close".
+- Vendors find their way with a flow field on a 0.5 m grid of the floor. A
+  vendor that makes no progress for 3 s side-steps free.
+- A wrong step sets off an alarm: vendors within 30 m go to that rack for
+  8 s.
+- The money gun, a cartoon cash blower: left click fires bills, $500 a
+  shot, 4 shots a second, from a $20,000 budget. A hit distracts a vendor
+  for 5 s. A miss lands as a lure that one passing vendor picks up. With
+  no budget, the gun clicks.
+- Approved POs (+$5,000, back after 30 s) in four areas, and one toolkit a
+  shift that makes every step 30% faster.
+- The shift report adds vendors distracted and money spent.
+
 ## 0.5.0
 
 A second game, Zero Down, and a start screen that picks the game.

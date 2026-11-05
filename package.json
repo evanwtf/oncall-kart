@@ -1,6 +1,6 @@
 {
   "name": "oncall-kart",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Two browser games about being on call: a kart racer and a first-person shift.",
   "license": "MIT",
