@@ -121,7 +121,7 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
   el(
     'p',
     'tagline',
-    `Your shift: ${Math.round(SHOOTER_TUNING.shiftSeconds / 60)} minutes. Servers will break. Fix them. Apply every patch, or you are fired. Vendors will find you: keep them busy with the budget.`,
+    `Your shift: ${Math.round(SHOOTER_TUNING.shiftSeconds / 60)} minutes. Servers break. Fix them. Apply every patch, or you are fired. Vendors come to you: keep them busy with the budget.`,
     briefing,
   );
   const cols = el('div', 'zd-brief-cols', undefined, briefing);
@@ -183,7 +183,7 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
     breaches: row('SLA breaches'),
     wrong: row('Wrong steps'),
     patches: row('Patches applied'),
-    vendors: row('Vendors distracted'),
+    vendors: row('Distractions'),
     money: row('Money spent'),
   };
   const endPatches = el('ul', 'zd-end-patches', undefined, ended);

@@ -124,7 +124,8 @@ Each vendor within 2 m takes 20 points off your speed, down to 10%:
 | 4                | 20%                      |
 | 5 or more        | 10%                      |
 
-The slowdown applies to the work bar too. You can always walk through
+The slowdown applies to the work bar too. A vendor behind a wall or a rack
+does not count. You can walk through
 vendors, and your speed comes back as soon as you get clear.
 
 The money gun fires bills. Each shot costs $500 of the shift's $20,000

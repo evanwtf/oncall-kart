@@ -64,7 +64,8 @@ describe('shooter screens in the DOM', () => {
       locked: false,
     });
     const text = root.querySelector('.zd-report')?.textContent ?? '';
-    expect(text).toContain('Vendors distracted7');
+    expect(text).toContain('Distractions7');
+    expect(text).not.toContain('Vendors distracted');
     expect(text).toContain('Money spent$12,500');
     expect(root.querySelector('.zd-controls')?.textContent).toContain('Left click');
   });

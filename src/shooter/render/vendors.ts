@@ -24,6 +24,8 @@ const DOLLARS_EACH = 3;
 /** Role tags show within this distance (m). */
 const TAG_RANGE = 8;
 const ROLES = Object.keys(VENDOR_ROLES) as VendorRole[];
+/** How fast a vendor turns to face the player (1/s). */
+const TURN_RATE = 12;
 
 /** Jacket or shirt colour per role. */
 const ROLE_COLORS: Record<VendorRole, number> = {
@@ -220,6 +222,9 @@ export function createVendorLayer(scene: THREE.Scene): VendorLayer {
   const prevZ = new Float64Array(MAX);
   const yaws = new Float64Array(MAX);
   let known = 0;
+  /** Vendors that have a facing yet; a new one faces the player at once. */
+  let turned = 0;
+  let lastAnim = 0;
 
   const root = new THREE.Matrix4();
   const local = new THREE.Matrix4();
@@ -255,11 +260,16 @@ export function createVendorLayer(scene: THREE.Scene): VendorLayer {
     },
     reset() {
       known = 0;
+      turned = 0;
+      yaws.fill(0);
     },
     update(s, alpha, animTime, camera) {
       counts.clear();
       const n = Math.min(MAX, s.vendors.length);
       const camQ = camera.quaternion;
+      // A turn rate per second, not per frame: the same at 60 Hz and 120 Hz.
+      const turn = 1 - Math.exp(-TURN_RATE * Math.max(0, animTime - lastAnim));
+      lastAnim = animTime;
       for (let i = 0; i < n; i++) {
         const v = s.vendors[i];
         if (!v) continue;
@@ -274,7 +284,7 @@ export function createVendorLayer(scene: THREE.Scene): VendorLayer {
         const want = Math.atan2(s.player.x - x, s.player.z - z);
         let d = want - (yaws[i] ?? 0);
         d = Math.atan2(Math.sin(d), Math.cos(d));
-        yaws[i] = (yaws[i] ?? 0) + d * Math.min(1, 0.25);
+        yaws[i] = i >= turned ? want : (yaws[i] ?? 0) + d * turn;
         const phase = animTime * 9 + v.id * 1.7;
         const bob = v.walking && !distracted ? Math.abs(Math.sin(phase)) * 0.05 : 0;
         q.setFromAxisAngle(yAxis, yaws[i] ?? 0);
@@ -323,6 +333,7 @@ export function createVendorLayer(scene: THREE.Scene): VendorLayer {
           }
         }
       }
+      turned = n;
       for (const m of meshes) {
         m.count = counts.get(m) ?? 0;
         m.instanceMatrix.needsUpdate = true;

@@ -10,8 +10,8 @@ Zero Down, phase 2 ("vendors and the money gun").
   company or person.
 - Evan's rule: each vendor within 2 m takes 20 points off your speed, down
   to a floor of 10%. The slowdown applies to the work bar too. A distracted
-  vendor does not count, and you can always walk through vendors. The HUD
-  shows "Speed 40% · 3 vendors close".
+  vendor does not count, nor does one behind a wall or a rack. You can walk
+  through vendors. The HUD shows "Speed 40% · 3 vendors close".
 - Vendors find their way with a flow field on a 0.5 m grid of the floor. A
   vendor that makes no progress for 3 s side-steps free.
 - A wrong step sets off an alarm: vendors within 30 m go to that rack for
@@ -21,8 +21,9 @@ Zero Down, phase 2 ("vendors and the money gun").
   for 5 s. A miss lands as a lure that one passing vendor picks up. With
   no budget, the gun clicks.
 - Approved POs (+$5,000, back after 30 s) in four areas, and one toolkit a
-  shift that makes every step 30% faster.
-- The shift report adds vendors distracted and money spent.
+  shift: with it, each step takes 70% of the time.
+- The shift report adds distractions (hits and lures taken) and money
+  spent.
 
 ## 0.5.0
 

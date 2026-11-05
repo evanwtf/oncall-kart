@@ -185,7 +185,7 @@ export interface Pickup { id: number; kind: 'po' | 'toolkit'; x: number; z: numb
   - A short kick when it fires. Bills in flight as instanced quads that flutter. Lures as small piles of bills.
 - [ ] **Pickups:** a PO is a clipboard with a green "APPROVED" stamp, bobbing. The toolkit is a red tool case.
 - [ ] **HUD:**
-  - Budget as `$20,000`; it flashes red at 0.
+  - Budget as `$20,000`; it flashes red below one shot ($500), where the gun clicks.
   - When the factor is below 1: "Speed 40% · 3 vendors close".
   - The `vendor-close` line as a toast: "Account exec: Got five minutes?"
   - The floor map shows vendors as orange dots and POs as green dots.
