@@ -32,7 +32,9 @@ import { crossedForward, type Projection, type Track } from './track';
 import { TUNING } from './tuning';
 import type { HitKind, HitOutcome } from './penalty';
 
-export { standings } from './standings';
+import { standings } from './standings';
+
+export { standings };
 
 export type LapCount = 1 | 3 | 10;
 
@@ -121,6 +123,8 @@ export interface Race {
   hazards: readonly Hazard[];
   /** Next id for a projectile or a puddle. */
   nextEntityId: number;
+  /** Kart ids in finishing order, frozen when the player finishes; null before. */
+  finalOrder: number[] | null;
 }
 
 /**
@@ -187,6 +191,7 @@ export function createRace(config: RaceConfig, track: Track): Race {
     puddles: [],
     hazards: track.def.hazards ?? [],
     nextEntityId: 1,
+    finalOrder: null,
   };
 }
 
@@ -289,7 +294,11 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
       if (lap.state.completed >= race.config.laps && k.finishedAt === null) {
         k.finishedAt = race.time;
         events.push({ type: 'finished', kartId: k.id, time: race.time });
-        if (k.id === race.playerId) race.phase = 'finished';
+        if (k.id === race.playerId) {
+          race.phase = 'finished';
+          // The results show this order; karts that finish later do not change it.
+          race.finalOrder = standings(race);
+        }
       }
     }
     k.lap = lap.state;

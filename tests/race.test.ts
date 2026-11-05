@@ -523,3 +523,51 @@ describe('kart contact', () => {
     expect(dist(a.kart.pos, b.kart.pos)).toBeGreaterThanOrEqual(2 * TUNING.kartRadius - 1e-6);
   });
 });
+
+describe('results snapshot (Review Focus 3)', () => {
+  it('freezes the order when the player finishes 5th; later finishers do not reorder it', () => {
+    const r = newRace(1, 1, 7);
+    toGo(r);
+    // Bots 3, 1, 4 and 2 have finished, in that order. 5, 6 and 7 are still racing.
+    const done: Array<[number, number]> = [
+      [3, 40],
+      [1, 41],
+      [4, 42],
+      [2, 43],
+    ];
+    for (const [id, t] of done) {
+      const k = r.karts[id];
+      if (!k) throw new Error('kart');
+      k.finishedAt = t;
+    }
+    const progress: Array<[number, number]> = [
+      [5, 600],
+      [6, 700],
+      [7, 650],
+    ];
+    for (const [id, s] of progress) {
+      const k = r.karts[id];
+      if (!k) throw new Error('kart');
+      k.kart = { ...spawnKart(track, s, 0), holdTime: 99 };
+      k.proj = { s, lateral: 0 };
+      k.lap = { ...k.lap, sector: 3 };
+    }
+    // The player crosses the line at 50 s.
+    r.time = 50;
+    const p = player(r);
+    p.lap = { ...p.lap, sector: 3 };
+    p.kart = { ...spawnKart(track, track.length - 1, 0), speed: 15 };
+    p.proj = { s: track.length - 1, lateral: 0 };
+    for (let i = 0; i < 30 && r.phase !== 'finished'; i++) stepRace(r, [GAS], 1 / 120);
+    expect(r.phase).toBe('finished');
+    const shown = [3, 1, 4, 2, 0, 6, 7, 5];
+    expect(r.finalOrder).toEqual(shown);
+    // Bot 5 then finishes ahead of 6 and 7: the live standings change, the snapshot does not.
+    const late = r.karts[5];
+    if (!late) throw new Error('kart');
+    late.finishedAt = r.time + 1;
+    expect(standings(r).slice(0, 6)).toEqual([3, 1, 4, 2, 0, 5]);
+    stepRace(r, [GAS], 1 / 120);
+    expect(r.finalOrder).toEqual(shown);
+  });
+});

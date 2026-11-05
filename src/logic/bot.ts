@@ -23,13 +23,13 @@ export interface BotProfile {
 
 /** Seven profiles, from strong to weak. Bot n (kart id n) uses profile n - 1. */
 export const BOT_PROFILES: readonly BotProfile[] = [
-  { topSpeedScale: 1.0, lineNoise: 0.2, wrongLaneChance: 0.02, driftChance: 0.8, itemDelay: 0.6 },
-  { topSpeedScale: 0.99, lineNoise: 0.3, wrongLaneChance: 0.04, driftChance: 0.7, itemDelay: 1 },
-  { topSpeedScale: 0.98, lineNoise: 0.4, wrongLaneChance: 0.06, driftChance: 0.6, itemDelay: 1.5 },
-  { topSpeedScale: 0.97, lineNoise: 0.5, wrongLaneChance: 0.08, driftChance: 0.5, itemDelay: 2 },
-  { topSpeedScale: 0.96, lineNoise: 0.6, wrongLaneChance: 0.1, driftChance: 0.4, itemDelay: 2.5 },
-  { topSpeedScale: 0.95, lineNoise: 0.7, wrongLaneChance: 0.13, driftChance: 0.3, itemDelay: 3 },
-  { topSpeedScale: 0.94, lineNoise: 0.8, wrongLaneChance: 0.16, driftChance: 0.2, itemDelay: 3.5 },
+  { topSpeedScale: 0.915, lineNoise: 0.2, wrongLaneChance: 0.02, driftChance: 0.8, itemDelay: 0.6 },
+  { topSpeedScale: 0.905, lineNoise: 0.3, wrongLaneChance: 0.04, driftChance: 0.7, itemDelay: 1 },
+  { topSpeedScale: 0.895, lineNoise: 0.4, wrongLaneChance: 0.06, driftChance: 0.6, itemDelay: 1.5 },
+  { topSpeedScale: 0.885, lineNoise: 0.5, wrongLaneChance: 0.08, driftChance: 0.5, itemDelay: 2 },
+  { topSpeedScale: 0.875, lineNoise: 0.6, wrongLaneChance: 0.1, driftChance: 0.4, itemDelay: 2.5 },
+  { topSpeedScale: 0.865, lineNoise: 0.7, wrongLaneChance: 0.13, driftChance: 0.3, itemDelay: 3 },
+  { topSpeedScale: 0.855, lineNoise: 0.8, wrongLaneChance: 0.16, driftChance: 0.2, itemDelay: 3.5 },
 ];
 
 /** The profile for a kart: its own, or the middle one for a kart without one. */
