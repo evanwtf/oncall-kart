@@ -17,3 +17,4 @@ Times are America/New_York, ISO 8601 with offset.
 | 2026-11-05T09:50-05:00 | Shooter work started: Evan asked for a first-person shooter beside the kart game. |
 | 2026-11-05T11:45-05:00 | Shooter design approved. |
 | 2026-11-05T13:35-05:00 | Shooter phase 1 live: v0.5.0 (6c64287). A start screen picks the kart game or Zero Down. |
+| 2026-11-05T15:29-05:00 | Shooter phase 2 live: v0.6.0 (24ebf51). Vendors, the slowdown, the money gun. The deploy job needed two re-runs (a Pages artifact race on the GitHub side). |
