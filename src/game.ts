@@ -1,7 +1,15 @@
+import { createCueState, cuesFor } from './audio/cues';
+import {
+  createAudio,
+  loadMuted,
+  saveMuted,
+  type AudioState,
+  type MusicState,
+} from './audio/engine';
 import { createInput, createKeyboard, isDriveKey, type Action } from './input';
 import { botInput } from './logic/bot';
 import type { ItemKind } from './logic/items';
-import { NO_INPUT, spawnKart } from './logic/kart';
+import { NO_INPUT, spawnKart, surfaceAt } from './logic/kart';
 import {
   createRace,
   respawn,
@@ -54,6 +62,12 @@ export interface DebugHooks {
   kartCount(): number;
   /** The player's race place, 1 to kartCount(). */
   place(): number;
+  /** 'locked' until the first key press or tap. */
+  audioState(): AudioState;
+  /** The sound is off (M, or Sound in the pause menu). */
+  muted(): boolean;
+  /** Only with ?debug=1: audio nodes of notes and effects still sounding. */
+  audioNodes?(): number;
   /** Only with ?debug=1: give the player an item (replacing any held item). */
   giveItem?(item: ItemKind): void;
   /** Only with ?debug=1: the bot driver drives the player kart, for screenshots and tests. */
@@ -96,6 +110,20 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     race: null,
     touch: coarse,
     autoGas: loadAutoGas(),
+    muted: loadMuted(),
+  };
+  // Sound starts on the first key press or tap: Safari blocks it before one.
+  const audio = createAudio();
+  audio.setMuted(state.muted);
+  let cueState = createCueState();
+  const unlock = () => audio.unlock();
+  for (const type of ['pointerdown', 'touchend', 'click', 'keydown']) {
+    window.addEventListener(type, unlock, true);
+  }
+  const toggleMute = () => {
+    state.muted = !state.muted;
+    audio.setMuted(state.muted);
+    saveMuted(state.muted);
   };
   touch.setAutoGas(state.autoGas);
   // The last device used wins. A touch shows the controls (a touchscreen laptop
@@ -147,6 +175,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     acc = 0;
     finishTimer = 0;
     itemTap = false;
+    cueState = createCueState();
   };
 
   /** The screen a pause returns to. */
@@ -162,6 +191,10 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   };
 
   const handle = (a: Action) => {
+    if (a === 'mute') {
+      toggleMute();
+      return;
+    }
     switch (state.screen) {
       case 'title':
         if (a === 'confirm') state.screen = 'setup';
@@ -209,6 +242,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             touch.setAutoGas(state.autoGas);
             saveAutoGas(state.autoGas);
           }
+          if (item === 'Sound') toggleMute();
           if (item === 'Quit to setup') toSetup();
         }
         break;
@@ -233,8 +267,11 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     },
   });
 
+  /** Race events of this frame, for the sound cues. */
+  let frameEvents: RaceEvent[] = [];
   const onEvents = (events: RaceEvent[]) => {
     if (events.length === 0) return;
+    frameEvents.push(...events);
     scene.onEvents(events);
     ui.onEvents(events, race);
     for (const e of events) {
@@ -249,12 +286,26 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       state.pauseIndex = 0;
     }
   };
+  const hidden = () => document.visibilityState === 'hidden';
+  // The loop stops in a hidden tab, so the sound follows the tab here too.
+  const syncPause = () => audio.setPaused(state.screen === 'paused' || hidden());
   const onVisibility = () => {
-    if (document.visibilityState === 'hidden') autoPause();
+    if (hidden()) autoPause();
+    syncPause();
   };
   document.addEventListener('visibilitychange', onVisibility);
   // A window that loses focus gets no key events: pause rather than coast.
   window.addEventListener('blur', autoPause);
+
+  /** The music for the screen: the race tune, faster on the final lap. */
+  const musicFor = (): MusicState => {
+    if (state.screen === 'title' || state.screen === 'setup' || state.screen === 'results') {
+      return 'title';
+    }
+    const me = race.karts[race.playerId];
+    const laps = race.config.laps;
+    return laps > 1 && me && me.lap.completed >= laps - 1 ? 'final-lap' : 'race';
+  };
 
   const frame = (now: number) => {
     const dt = Math.min(MAX_CATCH_UP, Math.max(0, (now - last) / 1000));
@@ -281,11 +332,18 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         acc -= TUNING.step;
         itemTap = false;
       }
+      audio.play(cuesFor(race, frameEvents, cueState, now / 1000));
+      const me = race.karts[race.playerId];
+      if (me) audio.setEngine(me.kart.speed, surfaceAt(me.proj, track) !== 'offroad');
       if (race.phase === 'finished') {
         finishTimer += dt;
         if (finishTimer >= FINISH_DELAY) state.screen = 'results';
       }
     }
+
+    frameEvents = [];
+    audio.setMusic(musicFor());
+    syncPause();
 
     scene.render(race, state.screen === 'paused' ? 1 : acc / TUNING.step);
     state.tags = scene.tags();
@@ -317,6 +375,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     rowS: () => race.board.map((r) => r.s),
     kartCount: () => race.karts.length,
     place: () => (race.finalOrder ?? standings(race)).indexOf(race.playerId) + 1,
+    audioState: () => audio.state(),
+    muted: () => state.muted,
   };
   if (new URLSearchParams(window.location.search).get('debug') === '1') {
     window.__oncallKart.setTicket = (type: TicketType, stepIndex: number) => {
@@ -324,6 +384,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       if (k) k.ticket = { ...k.ticket, type, stepIndex };
     };
     window.__oncallKart.race = () => race;
+    window.__oncallKart.audioNodes = () => audio.liveNodes();
     window.__oncallKart.autopilot = (on: boolean) => {
       autopilot = on;
     };

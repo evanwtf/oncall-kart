@@ -18,6 +18,8 @@ export interface UiState {
   /** The touch controls are on: show tap prompts and the touch-only pause items. */
   touch: boolean;
   autoGas: boolean;
+  /** The sound is off. */
+  muted: boolean;
   /** Kart name-tag positions from the scene, by kart id. */
   tags?: readonly TagPos[];
 }
@@ -37,12 +39,13 @@ export interface Ui {
 }
 
 export const LAP_LABELS = ['1', '3', '10'] as const;
-export type PauseItem = 'Resume' | 'Restart' | 'Respawn' | 'Auto-gas' | 'Quit to setup';
+export type PauseItem = 'Resume' | 'Restart' | 'Respawn' | 'Auto-gas' | 'Sound' | 'Quit to setup';
 const ALL_PAUSE_ITEMS: readonly PauseItem[] = [
   'Resume',
   'Restart',
   'Respawn',
   'Auto-gas',
+  'Sound',
   'Quit to setup',
 ];
 /** Touch has no R key and needs the auto-gas switch: those items are touch-only. */
@@ -53,8 +56,11 @@ export function pauseItems(touch: boolean): PauseItem[] {
   return ALL_PAUSE_ITEMS.filter((i) => touch || !TOUCH_ONLY.has(i));
 }
 
-const pauseText = (item: PauseItem, autoGas: boolean) =>
-  item === 'Auto-gas' ? `Auto-gas: ${autoGas ? 'On' : 'Off'}` : item;
+export function pauseText(item: PauseItem, state: { autoGas: boolean; muted: boolean }): string {
+  if (item === 'Auto-gas') return `Auto-gas: ${state.autoGas ? 'On' : 'Off'}`;
+  if (item === 'Sound') return `Sound: ${state.muted ? 'Off' : 'On'}`;
+  return item;
+}
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -121,7 +127,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   el(
     'p',
     'hint no-touch',
-    '↑ drive · ← → steer · Space drift · E item · R respawn · P pause',
+    '↑ drive · ← → steer · Space drift · E item · R respawn · P pause · M mute',
     title,
   );
   el('p', 'hint only-touch', 'Left thumb steers · DRIFT, BRAKE and ITEM on the right', title);
@@ -213,6 +219,10 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   });
 
   const hud = createHud(root);
+  // Shown on every screen while the sound is off.
+  const muteIcon = el('div', 'mute-icon', '🔇', root);
+  muteIcon.setAttribute('aria-label', 'Sound off');
+  muteIcon.hidden = true;
   let lastScreen: Screen | null = null;
   let lastRace: Race | null = null;
 
@@ -229,6 +239,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
     render(state) {
       current = state;
       root.classList.toggle('touch-on', state.touch);
+      if (muteIcon.hidden === state.muted) muteIcon.hidden = !state.muted;
       if (state.screen !== lastScreen) {
         show(state.screen);
         lastScreen = state.screen;
@@ -252,7 +263,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
           const i = items.indexOf(item);
           e.hidden = i < 0;
           e.classList.toggle('selected', i === state.pauseIndex);
-          const text = pauseText(item, state.autoGas);
+          const text = pauseText(item, state);
           if (e.textContent !== text) e.textContent = text;
         }
       }
@@ -314,6 +325,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
       panels.remove();
       hud.el.remove();
       rotate.remove();
+      muteIcon.remove();
     },
   };
 }

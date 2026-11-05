@@ -99,12 +99,14 @@ describe('keyboard', () => {
     expect(kb.takeActions()).toEqual([]);
   });
 
-  it('maps P and Escape to pause, R to respawn', () => {
+  it('maps P and Escape to pause, R to respawn, M to mute', () => {
     kb = createKeyboard(window);
     down('KeyP');
     down('Escape');
     down('KeyR');
-    expect(kb.takeActions()).toEqual(['pause', 'pause', 'respawn']);
+    down('KeyM');
+    down('KeyM', true);
+    expect(kb.takeActions()).toEqual(['pause', 'pause', 'respawn', 'mute']);
   });
 
   it('queues menu directions', () => {

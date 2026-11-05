@@ -1,7 +1,8 @@
 import type { KartInput } from './logic/kart';
 
 /** One-shot actions for menus and the race. Each fires once per key press. */
-export type Action = 'confirm' | 'back' | 'pause' | 'respawn' | 'up' | 'down' | 'left' | 'right';
+export type Action =
+  'confirm' | 'back' | 'pause' | 'respawn' | 'mute' | 'up' | 'down' | 'left' | 'right';
 
 export interface Keyboard {
   /** Held keys as kart input. */
@@ -25,6 +26,7 @@ const ACTIONS: Record<string, Action> = {
   KeyP: 'pause',
   Escape: 'pause',
   KeyR: 'respawn',
+  KeyM: 'mute',
   ArrowUp: 'up',
   KeyW: 'up',
   ArrowDown: 'down',
