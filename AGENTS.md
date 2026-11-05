@@ -23,6 +23,12 @@ Phases: [docs/plan.md](docs/plan.md).
 | `npx playwright test`           | Smoke tests in Chromium and WebKit on the built site            |
 | `node scripts/check-public.mjs` | Public-repo guard over tracked files                            |
 
+Install the Playwright browsers once per clone, before the first e2e run:
+
+```sh
+npx playwright install chromium webkit
+```
+
 Run the full check before you push:
 
 ```sh

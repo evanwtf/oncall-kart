@@ -47,6 +47,13 @@ shows. Run `npm test` after an edit.
 
 ## Develop
 
+Before the first smoke-test run, install the test browsers:
+
+```sh
+npx playwright install chromium webkit
+npx playwright test
+```
+
 See [AGENTS.md](AGENTS.md) for the commands, the checks and the rules.
 
 ## License
