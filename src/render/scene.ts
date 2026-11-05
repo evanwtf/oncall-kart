@@ -172,11 +172,16 @@ export function createScene(canvas: HTMLCanvasElement, initial: Race): SceneHand
       renderer.render(scene, chase.camera);
     },
     onEvents(events: RaceEvent[]) {
+      let reshuffled = false;
       for (const e of events) {
-        if (e.type === 'board-reshuffled') gates.redrawRow(race.board, e.row);
+        if (e.type === 'board-reshuffled') {
+          for (const row of e.rows) gates.redrawRow(race.board, row);
+          reshuffled = true;
+        }
         if (e.type === 'sla-breach' && e.kartId === race.playerId) shake = 0.6;
         if (e.type === 'wrong-gate' && e.kartId === race.playerId) shake = Math.max(shake, 0.25);
       }
+      if (reshuffled) gates.sync(race.board);
     },
     reset(r: Race) {
       race = r;

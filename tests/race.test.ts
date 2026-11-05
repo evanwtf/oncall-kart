@@ -158,8 +158,16 @@ describe('gates', () => {
     const r = newRace();
     toGo(r);
     setUpAtRow(r, 2, 0, 'MAINT');
+    const before = JSON.stringify(r.board);
     const ev = driveFor(r, 0.5);
-    expect(ev).toContainEqual({ type: 'board-reshuffled', row: 2 });
+    const shuffle = ev.find((e) => e.type === 'board-reshuffled');
+    if (shuffle?.type !== 'board-reshuffled') throw new Error('no board-reshuffled event');
+    expect(shuffle.rows).toContain(2);
+    // Rows not named in the event did not change.
+    const old = JSON.parse(before) as typeof r.board;
+    r.board.forEach((row, i) => {
+      if (!shuffle.rows.includes(i)) expect(row).toEqual(old[i]);
+    });
   });
 
   it('triggers a gate once when the kart wiggles back and forth over the row', () => {

@@ -10,7 +10,8 @@ Phase 1: one kart, live on GitHub Pages.
 - Tickets: nine hardware ticket types, each with a runbook. Drive through
   the operation gates in order. A wrong gate spins you (about 1 s lost). A
   closed ticket gives a boost and a new ticket.
-- The change board: 6 gate rows a lap. Each row reshuffles after you pass it.
+- The change board: 6 gate rows a lap. After you pass a row, its labels swap
+  with rows behind you. The two rows ahead of you never change.
 - The pit lane: a `PIT` step means hands-on work. The kart stops for 2 s while the tech works.
 - SLA timer: a breach pages you, slows you down and issues a fresh ticket.
 - Races of 1, 3 or 10 laps. Eight drivers to pick from.

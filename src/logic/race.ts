@@ -53,7 +53,7 @@ export type RaceEvent =
   | { type: 'sla-breach'; kartId: number; ticket: Ticket }
   | { type: 'pit-service'; kartId: number; work: string }
   | { type: 'lap'; kartId: number; completed: number; lapTime: number }
-  | { type: 'board-reshuffled'; row: number }
+  | { type: 'board-reshuffled'; rows: number[] }
   | { type: 'respawn'; kartId: number }
   | { type: 'go' }
   | { type: 'finished'; kartId: number; time: number };
@@ -195,8 +195,9 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
         }
       }
       if (k.id === race.playerId) {
-        race.board = reshuffleAfterPass(race.board, i, race.rng);
-        events.push({ type: 'board-reshuffled', row: i });
+        const { board, rows } = reshuffleAfterPass(race.board, i, race.rng);
+        race.board = board;
+        if (rows.length > 0) events.push({ type: 'board-reshuffled', rows });
       }
     });
 

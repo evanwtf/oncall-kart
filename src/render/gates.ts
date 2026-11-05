@@ -17,6 +17,7 @@ export const OP_COLORS: Record<Op, string> = {
 
 interface SlotView {
   canvas: HTMLCanvasElement;
+  op: Op;
   texture: THREE.CanvasTexture;
   beam: THREE.MeshStandardMaterial;
 }
@@ -25,6 +26,8 @@ export interface GatesHandle {
   group: THREE.Group;
   /** Redraw the labels of one row from the board. */
   redrawRow(board: Board, row: number): void;
+  /** Redraw every slot whose drawn op differs from the board. A safety net. */
+  sync(board: Board): void;
   dispose(): void;
 }
 
@@ -101,7 +104,7 @@ export function buildGates(track: Track, board: Board): GatesHandle {
         label.rotation.y = facing < 0 ? Math.PI : 0;
         rowGroup.add(label);
       }
-      rowViews.push({ canvas, texture, beam: beamMat });
+      rowViews.push({ canvas, op: slot.op, texture, beam: beamMat });
     }
     views.push(rowViews);
     group.add(rowGroup);
@@ -115,8 +118,14 @@ export function buildGates(track: Track, board: Board): GatesHandle {
         const v = views[row]?.[i];
         if (!v) return;
         drawLabel(v.canvas, slot.op);
+        v.op = slot.op;
         v.texture.needsUpdate = true;
         v.beam.color.set(OP_COLORS[slot.op]);
+      });
+    },
+    sync(b: Board) {
+      b.forEach((row, ri) => {
+        if (row.slots.some((slot, i) => views[ri]?.[i]?.op !== slot.op)) this.redrawRow(b, ri);
       });
     },
     dispose() {

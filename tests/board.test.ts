@@ -41,22 +41,33 @@ describe('board', () => {
     expect(slotAt(row, (a.lateral + a.halfWidth + b.lateral - b.halfWidth) / 2)).toBeNull();
   });
 
-  it('reshuffles the passed row, keeps the next row and every op', () => {
+  it('reshuffles the passed row, keeps the next two rows and every op', () => {
     let changed = 0;
     for (let seed = 1; seed <= 100; seed++) {
       const rng = makeRng(seed);
       const before = createBoard(rng, track);
-      const passed = seed % before.length;
-      const nextRow = (passed + 1) % before.length;
+      const n = before.length;
+      const passed = seed % n;
       const snapshot = JSON.stringify(before);
-      const after = reshuffleAfterPass(before, passed, rng);
+      const { board: after, rows } = reshuffleAfterPass(before, passed, rng);
       expect(JSON.stringify(before)).toBe(snapshot);
       expect(ops(after)).toEqual(ops(before));
       for (const op of OPS) expect(ops(after)).toContain(op);
-      expect(after[nextRow]).toEqual(before[nextRow]);
+      // The two rows ahead of the player never change.
+      expect(after[(passed + 1) % n]).toEqual(before[(passed + 1) % n]);
+      expect(after[(passed + 2) % n]).toEqual(before[(passed + 2) % n]);
+      expect(rows).not.toContain((passed + 1) % n);
+      expect(rows).not.toContain((passed + 2) % n);
+      // Every row the result does not name is unchanged.
+      for (let i = 0; i < n; i++) {
+        if (!rows.includes(i)) expect(after[i], `row ${i}`).toEqual(before[i]);
+      }
       const p0 = before[passed]?.slots.map((s) => s.op).join();
       const p1 = after[passed]?.slots.map((s) => s.op).join();
-      if (p0 !== p1) changed++;
+      if (p0 !== p1) {
+        changed++;
+        expect(rows).toContain(passed);
+      }
     }
     expect(changed).toBeGreaterThanOrEqual(95);
   });

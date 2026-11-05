@@ -65,27 +65,37 @@ export function slotAt(row: GateRow, lateral: number): GateSlot | null {
   return row.slots.find((s) => Math.abs(lateral - s.lateral) <= s.halfWidth) ?? null;
 }
 
+/** Rows ahead of the player that a reshuffle never touches. */
+const PROTECTED_AHEAD = 2;
+
 /**
- * Reshuffle the row the player just passed: swap each of its ops with a
- * random slot in another row. The next row stays as it is, so no row changes
- * while the player approaches it. Returns a new board.
+ * Reshuffle the row the player just passed ("the change board moved"): swap
+ * each of its ops with a random slot in a row behind the player. The next
+ * two rows stay as they are, so no row changes while the player approaches
+ * it. Returns a new board and the rows whose ops changed.
  */
-export function reshuffleAfterPass(board: Board, passedRow: number, rng: Rng): Board {
+export function reshuffleAfterPass(
+  board: Board,
+  passedRow: number,
+  rng: Rng,
+): { board: Board; rows: number[] } {
   const out: Board = board.map((r) => ({ s: r.s, slots: r.slots.map((s) => ({ ...s })) }));
   const n = out.length;
-  const keep = (passedRow + 1) % n;
   const others: Array<[number, number]> = [];
-  out.forEach((r, ri) => {
-    if (ri === passedRow || ri === keep) return;
-    r.slots.forEach((_, si) => others.push([ri, si]));
-  });
+  for (let k = PROTECTED_AHEAD + 1; k < n; k++) {
+    const ri = (passedRow + k) % n;
+    out[ri]?.slots.forEach((_, si) => others.push([ri, si]));
+  }
   const row = out[passedRow];
-  if (!row || others.length === 0) return out;
+  if (!row || others.length === 0) return { board: out, rows: [] };
   for (const slot of row.slots) {
     const [ri, si] = pick(rng, others);
     const other = out[ri]?.slots[si];
     if (!other) continue;
     [slot.op, other.op] = [other.op, slot.op];
   }
-  return out;
+  const rows = out
+    .map((r, i) => (r.slots.some((s, j) => s.op !== board[i]?.slots[j]?.op) ? i : -1))
+    .filter((i) => i >= 0);
+  return { board: out, rows };
 }
