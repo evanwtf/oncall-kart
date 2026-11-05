@@ -58,6 +58,8 @@ export interface DebugHooks {
   giveItem?(item: ItemKind): void;
   /** Only with ?debug=1: the bot driver drives the player kart, for screenshots and tests. */
   autopilot?(on: boolean): void;
+  /** Only with ?debug=1: the live race state, for probes that set up a scene. */
+  race?(): Race;
   /** Only with ?debug=1: put the player at s on the centerline, at rest. */
   placePlayer?(s: number): void;
   /** Only with ?debug=1: give the player a ticket of this type, at this step. */
@@ -321,6 +323,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       const k = player();
       if (k) k.ticket = { ...k.ticket, type, stepIndex };
     };
+    window.__oncallKart.race = () => race;
     window.__oncallKart.autopilot = (on: boolean) => {
       autopilot = on;
     };
