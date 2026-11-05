@@ -4,6 +4,8 @@ import { canvasTexture, floorTexture, hazardTexture } from '../../render/texture
 import { areaAt, type FloorDef, type Target } from '../logic/floor';
 import type { Shift } from '../logic/shift';
 import { SHOOTER_TUNING } from '../logic/tuning';
+import { createGun, createPropLayer } from './props';
+import { createVendorLayer } from './vendors';
 
 export interface ShooterScene {
   readonly renderer: THREE.WebGLRenderer;
@@ -13,6 +15,8 @@ export interface ShooterScene {
   reset(s: Shift): void;
   /** A rack's ticket closed: its beacon shows green for a moment. */
   flashGreen(rackId: string): void;
+  /** The money gun fired: a short kick. */
+  kick(): void;
   /** `view`: the live yaw and pitch from the input, newer than the last logic step. */
   render(s: Shift, alpha: number, paused: boolean, view?: { yaw: number; pitch: number }): void;
   dispose(): void;
@@ -167,6 +171,9 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
   const pixelRatio = () => Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(pixelRatio());
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // Two passes a frame (the floor, then the gun): clear and count by hand.
+  renderer.autoClear = false;
+  renderer.info.autoReset = false;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(FOG);
@@ -335,6 +342,10 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
   const heightOf = (t: Target) =>
     t.kind === 'rack' ? RACK_HEIGHT : t.kind === 'switch' ? SWITCH_HEIGHT : FIREWALL_HEIGHT;
 
+  const vendorLayer = createVendorLayer(scene);
+  const propLayer = createPropLayer(scene);
+  const gun = createGun();
+
   const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 120);
   camera.rotation.order = 'YXZ';
 
@@ -389,14 +400,19 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
     renderer,
     capture(s) {
       prev = { x: s.player.x, z: s.player.z };
+      vendorLayer.capture(s);
     },
     reset(s) {
       prev = { x: s.player.x, z: s.player.z };
       greens = new Map();
       setTint([]);
+      vendorLayer.reset();
     },
     flashGreen(rackId) {
       greens.set(rackId, animTime + GREEN_TIME);
+    },
+    kick() {
+      gun.kick();
     },
     render(s, alpha, paused, view) {
       const wall = performance.now();
@@ -461,7 +477,16 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
       markers.count = k;
       markers.instanceMatrix.needsUpdate = true;
 
+      camera.updateMatrixWorld();
+      vendorLayer.update(s, a, animTime, camera);
+      propLayer.update(s, animTime);
+      gun.update(dt, camera.aspect, s.work !== null);
+
+      renderer.info.reset();
+      renderer.clear();
       renderer.render(scene, camera);
+      renderer.clearDepth();
+      renderer.render(gun.scene, gun.camera);
     },
     dispose() {
       window.removeEventListener('resize', resize);
@@ -472,6 +497,9 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
       beams.dispose();
       markers.dispose();
       lights.dispose();
+      vendorLayer.dispose();
+      propLayer.dispose();
+      gun.dispose();
       renderer.dispose();
     },
   };

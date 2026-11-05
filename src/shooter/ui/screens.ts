@@ -1,5 +1,6 @@
 import type { Ending, Shift } from '../logic/shift';
 import { SHOOTER_TUNING } from '../logic/tuning';
+import { formatBudget } from './hud';
 
 export type ShooterScreen = 'briefing' | 'playing' | 'paused' | 'ended';
 
@@ -100,6 +101,7 @@ function setSelected(e: HTMLElement, on: boolean): void {
 const CONTROLS: readonly [string, string][] = [
   ['W A S D / arrows', 'Move and strafe'],
   ['Mouse', 'Look'],
+  ['Left click', 'Fire the money gun: it distracts vendors'],
   ['1-9', 'Pick a step at a broken rack'],
   ['E (hold)', 'Work: a runbook step or a patch'],
   ['P / Esc', 'Pause'],
@@ -119,7 +121,7 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
   el(
     'p',
     'tagline',
-    `Your shift: ${Math.round(SHOOTER_TUNING.shiftSeconds / 60)} minutes. Servers will break. Fix them. Apply every patch, or you are fired.`,
+    `Your shift: ${Math.round(SHOOTER_TUNING.shiftSeconds / 60)} minutes. Servers will break. Fix them. Apply every patch, or you are fired. Vendors will find you: keep them busy with the budget.`,
     briefing,
   );
   const cols = el('div', 'zd-brief-cols', undefined, briefing);
@@ -181,6 +183,8 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
     breaches: row('SLA breaches'),
     wrong: row('Wrong steps'),
     patches: row('Patches applied'),
+    vendors: row('Vendors distracted'),
+    money: row('Money spent'),
   };
   const endPatches = el('ul', 'zd-end-patches', undefined, ended);
   const endActions = el('div', 'actions', undefined, ended);
@@ -236,6 +240,8 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
         setText(rows.wrong, String(shift.stats.wrongSteps));
         const applied = shift.patches.filter((p) => p.applied).length;
         setText(rows.patches, `${applied} / ${shift.patches.length}`);
+        setText(rows.vendors, String(shift.stats.vendorsDistracted));
+        setText(rows.money, formatBudget(shift.stats.moneySpent));
         const key = shift.patches.map((p) => `${p.id}:${p.applied}`).join('|');
         if (endPatches.dataset.key !== key) {
           endPatches.dataset.key = key;

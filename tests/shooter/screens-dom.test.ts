@@ -40,4 +40,32 @@ describe('shooter screens in the DOM', () => {
       );
     }
   });
+
+  it('reports vendors distracted and money spent, and lists the fire control', () => {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const screens = createShooterScreens(root, {
+      start: noop,
+      pauseItem: noop,
+      endItem: noop,
+      sensitivity: noop,
+      toStartScreen: noop,
+    });
+    const shift = createShift(1);
+    shift.ended = 'rough';
+    shift.stats.vendorsDistracted = 7;
+    shift.stats.moneySpent = 12500;
+    screens.render({
+      screen: 'ended',
+      shift,
+      pauseIndex: 0,
+      endIndex: 0,
+      sensitivityIndex: 3,
+      locked: false,
+    });
+    const text = root.querySelector('.zd-report')?.textContent ?? '';
+    expect(text).toContain('Vendors distracted7');
+    expect(text).toContain('Money spent$12,500');
+    expect(root.querySelector('.zd-controls')?.textContent).toContain('Left click');
+  });
 });

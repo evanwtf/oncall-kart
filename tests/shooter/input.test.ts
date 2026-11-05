@@ -199,6 +199,47 @@ describe('shooter input', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  const button = (type: 'mousedown' | 'mouseup', b = 0) =>
+    canvas.dispatchEvent(new MouseEvent(type, { button: b, bubbles: true }));
+
+  it('fires while the left button is held and the mouse is locked', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    expect(input.read().fire).toBe(false);
+    button('mousedown');
+    expect(input.read().fire).toBe(true);
+    expect(input.read().fire).toBe(true);
+    button('mouseup');
+    expect(input.read().fire).toBe(false);
+    // The right button does not fire.
+    button('mousedown', 2);
+    expect(input.read().fire).toBe(false);
+  });
+
+  it('does not fire on a click while unlocked: that click only asks for the lock', () => {
+    input = createShooterInput(window, canvas);
+    button('mousedown');
+    expect(input.read().fire).toBe(false);
+    // The lock lands while the button is still down: still no fire until a new press.
+    setLock(canvas);
+    expect(input.read().fire).toBe(false);
+    button('mouseup');
+    button('mousedown');
+    expect(input.read().fire).toBe(true);
+  });
+
+  it('stops firing when the lock is lost or the window blurs', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    button('mousedown');
+    setLock(null);
+    expect(input.read().fire).toBe(false);
+    setLock(canvas);
+    button('mousedown');
+    window.dispatchEvent(new Event('blur'));
+    expect(input.read().fire).toBe(false);
+  });
+
   it('queues menu actions for Enter and the arrows', () => {
     input = createShooterInput(window, canvas);
     down('Enter');

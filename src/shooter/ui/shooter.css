@@ -402,3 +402,73 @@
 .zd .action.selected {
   outline: 3px solid var(--ink);
 }
+
+/* Phase 2: the budget, the slowdown readout and the toolkit. */
+
+.zd-wallet {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border-left: 4px solid var(--green);
+}
+
+.zd-wallet-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.zd-budget {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--green);
+}
+
+.zd-budget.empty {
+  color: var(--red);
+  animation: zd-flash 0.5s steps(2, jump-none) infinite;
+}
+
+@keyframes zd-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+
+.zd-toolkit {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.zd-speed {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 34px);
+  transform: translateX(-50%);
+  padding: 3px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--amber);
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.zd-toast.vendor {
+  color: var(--amber);
+  font-style: italic;
+}

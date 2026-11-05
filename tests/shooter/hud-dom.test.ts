@@ -10,6 +10,7 @@ import {
   yawToward,
   type Shift,
 } from '../../src/shooter/logic/shift';
+import { spawnVendor } from '../../src/shooter/logic/vendors';
 import { createShooterHud } from '../../src/shooter/ui/hud';
 
 afterEach(() => {
@@ -71,5 +72,35 @@ describe('shooter hud in the DOM', () => {
     expect(facingTarget(s)).not.toBeNull();
     expect(mutationsOfRepeat(true)).toEqual([]);
     expect(mutationsOfRepeat(false)).toEqual([]);
+  });
+
+  it('shows the budget, the slowdown and the toolkit, and changes nothing on a repeat', () => {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = createShooterHud(root);
+    hud.el.hidden = false;
+    const s = scene();
+    const q = (sel: string) => root.querySelector(sel) as HTMLElement;
+    hud.update(s, facingTarget(s));
+    expect(q('.zd-budget').textContent).toBe('$20,000');
+    expect(q('.zd-speed').hidden).toBe(true);
+    expect(q('.zd-toolkit').hidden).toBe(true);
+    const { x, z } = s.player;
+    spawnVendor(s, 'renewal-rep', x - 1.5, z);
+    spawnVendor(s, 'renewal-rep', x + 1.5, z);
+    spawnVendor(s, 'renewal-rep', x, z - (s.floor.racks[0]?.fz ?? 1) * 1.5);
+    s.budget = 0;
+    s.toolkit = true;
+    hud.update(s, facingTarget(s));
+    expect(q('.zd-speed').textContent).toBe('Speed 40% · 3 vendors close');
+    expect(q('.zd-speed').hidden).toBe(false);
+    expect(q('.zd-budget').textContent).toBe('$0');
+    expect(q('.zd-budget').classList.contains('empty')).toBe(true);
+    expect(q('.zd-toolkit').hidden).toBe(false);
+    const obs = new MutationObserver(() => undefined);
+    obs.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+    hud.update(s, facingTarget(s));
+    expect(obs.takeRecords()).toEqual([]);
+    obs.disconnect();
   });
 });

@@ -17,6 +17,13 @@ import {
   type ShiftStats,
 } from './logic/shift';
 import { SHOOTER_TUNING } from './logic/tuning';
+import {
+  VENDOR_ROLES,
+  closeVendors,
+  slowFactor,
+  spawnVendor,
+  type VendorRole,
+} from './logic/vendors';
 import { createShooterScene } from './render/scene';
 import { createShooterHud } from './ui/hud';
 import {
@@ -49,6 +56,16 @@ export interface ShooterHooks {
   player(): { x: number; z: number; yaw: number };
   /** Draw calls and triangles in the last frame. */
   renderInfo(): { calls: number; triangles: number };
+  vendors(): { id: number; role: VendorRole; x: number; z: number; distracted: boolean }[];
+  budget(): number;
+  /** The slowdown now: 1 with nobody close, down to 0.1. */
+  speedFactor(): number;
+  /** Only with ?debug=1: put a vendor on the floor. */
+  spawnVendor?(role: VendorRole, x: number, z: number): void;
+  /** Only with ?debug=1: set the budget. */
+  setBudget?(n: number): void;
+  /** Only with ?debug=1: hold the fire button (true) or let go (false), as the mouse does. */
+  fire?(on: boolean): void;
   /** Only with ?debug=1: stand 0.8 m in front of a target, looking at it. */
   faceTarget?(id: string): void;
   /** Only with ?debug=1: break a rack now with a ticket of this type. */
@@ -114,6 +131,8 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
   let acc = 0;
   /** A pick waits for the next fixed step: a frame shorter than one step runs none. */
   let pendingPick: Step | null = null;
+  /** The debug fire hook holds the button down. */
+  let heldFire = false;
   let last = performance.now();
 
   const applySensitivity = () =>
@@ -254,6 +273,7 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     hud.onEvents(events, shift);
     for (const e of events) {
       if (e.type === 'ticket-closed') scene.flashGreen(e.rackId);
+      if (e.type === 'fired') scene.kick();
       if (e.type === 'shift-end') {
         screen = 'ended';
         endIndex = 0;
@@ -272,6 +292,7 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     if (screen === 'playing') {
       acc += dt;
       const read: ShiftInput = input.read();
+      if (heldFire) read.fire = true;
       pendingPick = read.pick ?? pendingPick;
       while (acc >= STEP && screen === 'playing') {
         scene.capture(shift);
@@ -321,6 +342,16 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
       calls: scene.renderer.info.render.calls,
       triangles: scene.renderer.info.render.triangles,
     }),
+    vendors: () =>
+      shift.vendors.map((v) => ({
+        id: v.id,
+        role: v.role,
+        x: v.x,
+        z: v.z,
+        distracted: shift.time < v.distractedUntil,
+      })),
+    budget: () => shift.budget,
+    speedFactor: () => slowFactor(closeVendors(shift)),
   };
   if (new URLSearchParams(window.location.search).get('debug') === '1') {
     const hooks = window.__oncallShooter;
@@ -355,6 +386,23 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
       ) {
         shift.nextBreak += 1;
       }
+      // The same for vendor arrivals: a jump does not bring a crowd at once.
+      while (
+        shift.nextArrival < shift.arrivals.length &&
+        (shift.arrivals[shift.nextArrival]?.time ?? 0) <= shift.time
+      ) {
+        shift.nextArrival += 1;
+      }
+    };
+    hooks.spawnVendor = (role: VendorRole, x: number, z: number) => {
+      if (!(role in VENDOR_ROLES)) return;
+      spawnVendor(shift, role, x, z);
+    };
+    hooks.setBudget = (n: number) => {
+      shift.budget = Math.max(0, n);
+    };
+    hooks.fire = (on: boolean) => {
+      heldFire = on;
     };
   }
 }

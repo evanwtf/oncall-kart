@@ -20,7 +20,7 @@ export interface ShooterInputOptions {
 }
 
 export interface ShooterInput {
-  /** Held keys, the view and the last pick. A pick is returned once. */
+  /** Held keys, the fire button, the view and the last pick. A pick is returned once. */
   read(): ShiftInput;
   /** Actions since the last call. The queue is then empty. */
   takeActions(): ShooterAction[];
@@ -82,10 +82,15 @@ export function createShooterInput(
   let wasLocked = false;
   let releasing = false;
   let unlockedAt = -Infinity;
+  /** The left button, pressed while locked. A press that asked for the lock never fires. */
+  let firing = false;
   const any = (codes: readonly string[]) => codes.some((c) => held.has(c));
   const isLocked = () => doc.pointerLockElement === canvas;
 
-  const clear = () => held.clear();
+  const clear = () => {
+    held.clear();
+    firing = false;
+  };
 
   /** Ask for the lock. A refusal, thrown or rejected, is caught and logs nothing. */
   const requestLock = () => {
@@ -135,6 +140,12 @@ export function createShooterInput(
     pitch -= (e.movementY || 0) * sensitivity;
     pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
   };
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 0 && isLocked()) firing = true;
+  };
+  const onMouseUp = (e: MouseEvent) => {
+    if (e.button === 0) firing = false;
+  };
   const onLockChange = () => {
     const now = isLocked();
     if (wasLocked && !now) {
@@ -157,6 +168,8 @@ export function createShooterInput(
   win.addEventListener('keyup', onUp);
   win.addEventListener('blur', clear);
   doc.addEventListener('mousemove', onMouse);
+  doc.addEventListener('mousedown', onMouseDown);
+  doc.addEventListener('mouseup', onMouseUp);
   doc.addEventListener('pointerlockchange', onLockChange);
   doc.addEventListener('pointerlockerror', onLockError);
   doc.addEventListener('visibilitychange', onVisibility);
@@ -171,6 +184,7 @@ export function createShooterInput(
         pitch,
         work: any(WORK),
         pick,
+        fire: firing && isLocked(),
       };
       pick = null;
       return out;
@@ -200,6 +214,8 @@ export function createShooterInput(
       win.removeEventListener('keyup', onUp);
       win.removeEventListener('blur', clear);
       doc.removeEventListener('mousemove', onMouse);
+      doc.removeEventListener('mousedown', onMouseDown);
+      doc.removeEventListener('mouseup', onMouseUp);
       doc.removeEventListener('pointerlockchange', onLockChange);
       doc.removeEventListener('pointerlockerror', onLockError);
       doc.removeEventListener('visibilitychange', onVisibility);

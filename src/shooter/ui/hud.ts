@@ -2,6 +2,7 @@ import { STEP_COLORS, type Step } from '../../logic/ops';
 import type { FloorDef, Target } from '../logic/floor';
 import { PANEL_STEPS, type Shift, type ShiftEvent } from '../logic/shift';
 import { SHOOTER_TUNING } from '../logic/tuning';
+import { VENDOR_ROLES, closeVendors, slowFactor } from '../logic/vendors';
 
 /** m:ss for a number of seconds, rounded up, so 0:00 shows only at the very end. */
 export function formatClock(seconds: number): string {
@@ -14,8 +15,22 @@ export function panelLabel(step: Step, pitWork: string | undefined): string {
   return step === 'PIT' ? `Hands-on: ${pitWork ?? 'the work at the rack'}` : step;
 }
 
+/** The budget as dollars: $20,000. */
+export function formatBudget(n: number): string {
+  return '$' + Math.max(0, Math.round(n)).toLocaleString('en-US');
+}
+
+/** The slowdown readout for `close` vendors; empty when nobody is close. */
+export function speedText(close: number): string {
+  if (close <= 0) return '';
+  const pct = Math.round(slowFactor(close) * 100);
+  return `Speed ${pct}% · ${close} vendor${close === 1 ? '' : 's'} close`;
+}
+
+export type ToastKind = 'good' | 'bad' | 'vendor';
+
 /** The toast for an event, or null for none. */
-export function eventToast(e: ShiftEvent, s: Shift): { text: string; kind: 'good' | 'bad' } | null {
+export function eventToast(e: ShiftEvent, s: Shift): { text: string; kind: ToastKind } | null {
   switch (e.type) {
     case 'break': {
       return { text: `${e.ticket.type.title} at ${e.ticket.location}`, kind: 'bad' };
@@ -32,6 +47,12 @@ export function eventToast(e: ShiftEvent, s: Shift): { text: string; kind: 'good
     }
     case 'sla-breach':
       return { text: `SLA breach at ${e.rackId}`, kind: 'bad' };
+    case 'vendor-close':
+      return { text: `${VENDOR_ROLES[e.role].title}: ${e.line}`, kind: 'vendor' };
+    case 'picked-up':
+      return e.kind === 'po'
+        ? { text: `Approved PO: +${formatBudget(SHOOTER_TUNING.poAmount)}`, kind: 'good' }
+        : { text: 'Toolkit: every step is faster', kind: 'good' };
     default:
       return null;
   }
@@ -106,6 +127,14 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
   el('div', 'zd-patches-head', 'Patches', patchBox);
   const patchList = el('ul', 'zd-patch-list', undefined, patchBox);
   el('div', 'zd-crosshair', undefined, hud);
+  const speed = el('div', 'zd-speed', '', hud);
+  speed.hidden = true;
+  const wallet = el('div', 'zd-wallet', undefined, hud);
+  el('span', 'zd-wallet-label', 'Budget', wallet);
+  const budget = el('span', 'zd-budget', formatBudget(SHOOTER_TUNING.startBudget), wallet);
+  const toolkit = el('span', 'zd-toolkit', 'Toolkit', wallet);
+  toolkit.title = 'Toolkit: every step is faster';
+  toolkit.hidden = true;
   const toasts = el('div', 'zd-toasts', undefined, hud);
   const map = el('canvas', 'zd-map', undefined, hud);
   const panel = el('div', 'zd-panel', undefined, hud);
@@ -209,6 +238,18 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
       ctx.arc(t.x, t.z, r, 0, Math.PI * 2);
       ctx.fill();
     };
+    const dot = (x: number, z: number, color: string, r: number) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, z, r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    for (const p of s.pickups) {
+      if (p.kind === 'po' && p.respawnAt === null) dot(p.x, p.z, '#3ddc97', 1.1);
+    }
+    for (const v of s.vendors) {
+      dot(v.x, v.z, s.time < v.distractedUntil ? '#8a6a3a' : '#f28c28', 0.9);
+    }
     for (const p of s.patches) if (!p.applied) mark(find(p.targetId), '#4d9de0', 1.4);
     for (const o of s.open) mark(find(o.rackId), o.breached ? '#ff2d2d' : '#e15554', 1.4);
     // The player: a triangle that points the way the player looks.
@@ -279,6 +320,13 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
         if (f.bar.classList.contains('low') !== low) f.bar.classList.toggle('low', low);
       }
       renderPatches(s);
+      const text = speedText(closeVendors(s));
+      setText(speed, text);
+      setHidden(speed, text === '');
+      setText(budget, formatBudget(s.budget));
+      const broke = s.budget < SHOOTER_TUNING.shotCost;
+      if (budget.classList.contains('empty') !== broke) budget.classList.toggle('empty', broke);
+      setHidden(toolkit, !s.toolkit);
       renderMap(s);
       renderPanel(s, facing);
       toastList = toastList.filter((t) => {
