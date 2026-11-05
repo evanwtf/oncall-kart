@@ -38,4 +38,10 @@ export const SHOOTER_TUNING = {
   /** Radians per pixel of mouse movement. */
   mouseSensitivity: 0.0025,
   pitchLimitDeg: 80,
+
+  // Vendors (phase 2).
+  /** Cell size (m) of the grid vendors find their way on. */
+  navCell: 0.5,
+  /** A vendor's radius for collision with walls and racks. */
+  vendorRadius: 0.3,
 } as const;
