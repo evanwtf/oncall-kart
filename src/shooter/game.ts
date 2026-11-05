@@ -135,6 +135,8 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
   let pendingPick: Step | null = null;
   /** The debug fire hook holds the button down. */
   let heldFire = false;
+  /** A click waits for the next fixed step, as a pick does: a frame with no step must not lose it. */
+  let pendingFire = false;
   let last = performance.now();
 
   const applySensitivity = () =>
@@ -150,6 +152,7 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     hud.clear();
     acc = 0;
     pendingPick = null;
+    pendingFire = false;
   };
   adopt();
   const newShift = () => {
@@ -294,14 +297,19 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     if (screen === 'playing') {
       acc += dt;
       const read: ShiftInput = input.read();
-      if (heldFire) read.fire = true;
       pendingPick = read.pick ?? pendingPick;
+      pendingFire = pendingFire || !!read.fire || heldFire;
+      let stepped = false;
       while (acc >= STEP && screen === 'playing') {
         scene.capture(shift);
-        onEvents(stepShift(shift, { ...read, pick: pendingPick }, STEP));
+        onEvents(stepShift(shift, { ...read, pick: pendingPick, fire: pendingFire }, STEP));
         pendingPick = null;
+        stepped = true;
         acc -= STEP;
       }
+      // Fire stays on for every step of this frame (held, or a click: the cooldown
+      // keeps a click to one shot). It is spent once a step has run.
+      if (stepped) pendingFire = false;
     } else {
       // Drop keys and picks made in a menu.
       input.read();
@@ -397,7 +405,11 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
       }
     };
     hooks.spawnVendor = (role: VendorRole, x: number, z: number) => {
-      if (!(role in VENDOR_ROLES)) return;
+      // Own keys only: 'toString' is in every object.
+      if (!Object.hasOwn(VENDOR_ROLES, role)) return;
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      // The floor holds at most maxVendors, as for arrivals.
+      if (shift.vendors.length >= SHOOTER_TUNING.maxVendors) return;
       spawnVendor(shift, role, x, z);
     };
     hooks.setBudget = (n: number) => {

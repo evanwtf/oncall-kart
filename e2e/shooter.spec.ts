@@ -395,3 +395,44 @@ test('20 vendors and the gun stay within the draw-call budget', async ({ page })
   expect(info.calls).toBeLessThan(150);
   expect(errors).toEqual([]);
 });
+
+test('a pause freezes the vendors', async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  await page.evaluate(() =>
+    (window.__oncallShooter as ShooterHooks).spawnVendor?.('account-exec', 20, 18),
+  );
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => screen(page)).toBe('paused');
+  const before = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors());
+  await page.waitForTimeout(500);
+  await twoFrames(page);
+  const after = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors());
+  expect(after).toEqual(before);
+  // Resumed, it walks again.
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => screen(page)).toBe('playing');
+  await expect
+    .poll(() => page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors()[0]?.x))
+    .toBeLessThan(before[0]?.x ?? 0);
+  expect(errors).toEqual([]);
+});
+
+test('the debug spawn takes only real roles, and no more than 20 vendors', async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  const n = await page.evaluate(() => {
+    const h = window.__oncallShooter as ShooterHooks;
+    h.spawnVendor?.('toString' as never, 20, 18);
+    h.spawnVendor?.('constructor' as never, 20, 18);
+    for (let i = 0; i < 25; i++)
+      h.spawnVendor?.('renewal-rep', 10 + (i % 5), 15 + Math.floor(i / 5));
+    return h.vendors();
+  });
+  expect(n).toHaveLength(20);
+  expect(n.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))).toBe(true);
+  expect(n.every((v) => v.role === 'renewal-rep')).toBe(true);
+  expect(errors).toEqual([]);
+});

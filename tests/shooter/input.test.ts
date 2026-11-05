@@ -228,6 +228,23 @@ describe('shooter input', () => {
     expect(input.read().fire).toBe(true);
   });
 
+  it('fires once for a click that starts and ends between two reads', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    button('mousedown');
+    button('mouseup');
+    expect(input.read().fire).toBe(true);
+    expect(input.read().fire).toBe(false);
+  });
+
+  it('does not latch a click made while unlocked', () => {
+    input = createShooterInput(window, canvas);
+    button('mousedown');
+    button('mouseup');
+    setLock(canvas);
+    expect(input.read().fire).toBe(false);
+  });
+
   it('stops firing when the lock is lost or the window blurs', () => {
     input = createShooterInput(window, canvas);
     setLock(canvas);

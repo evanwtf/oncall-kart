@@ -84,12 +84,15 @@ export function createShooterInput(
   let unlockedAt = -Infinity;
   /** The left button, pressed while locked. A press that asked for the lock never fires. */
   let firing = false;
+  /** A press since the last read: a click shorter than a frame still fires once. */
+  let pressed = false;
   const any = (codes: readonly string[]) => codes.some((c) => held.has(c));
   const isLocked = () => doc.pointerLockElement === canvas;
 
   const clear = () => {
     held.clear();
     firing = false;
+    pressed = false;
   };
 
   /** Ask for the lock. A refusal, thrown or rejected, is caught and logs nothing. */
@@ -141,7 +144,10 @@ export function createShooterInput(
     pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
   };
   const onMouseDown = (e: MouseEvent) => {
-    if (e.button === 0 && isLocked()) firing = true;
+    if (e.button === 0 && isLocked()) {
+      firing = true;
+      pressed = true;
+    }
   };
   const onMouseUp = (e: MouseEvent) => {
     if (e.button === 0) firing = false;
@@ -184,9 +190,10 @@ export function createShooterInput(
         pitch,
         work: any(WORK),
         pick,
-        fire: firing && isLocked(),
+        fire: (firing || pressed) && isLocked(),
       };
       pick = null;
+      pressed = false;
       return out;
     },
     takeActions() {
