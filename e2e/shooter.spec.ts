@@ -66,6 +66,18 @@ const twoFrames = (page: Page) =>
     () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
   );
 
+/**
+ * Keep the browser from taking a real lock: a headless Chromium on Linux
+ * grants one, and a real lock under a faked pointerLockElement sends the
+ * mouse to the canvas, so menu clicks miss.
+ */
+const noRealLock = (page: Page) =>
+  page.addInitScript(() => {
+    Element.prototype.requestPointerLock = function () {
+      return Promise.resolve();
+    } as Element['requestPointerLock'];
+  });
+
 /** Pretend the browser took (canvas) or ended (null) the mouse lock. */
 const fakeLock = (page: Page, locked: boolean) =>
   page.evaluate((on) => {
@@ -193,6 +205,7 @@ test('every patch applied and nothing broken: a clean shift', async ({ page }) =
 test('a lost mouse lock pauses, and a blur or a hidden tab after it does not resume', async ({
   page,
 }) => {
+  await noRealLock(page);
   const errors = trackErrors(page);
   await open(page);
   await start(page);
@@ -228,6 +241,7 @@ test('a lost mouse lock pauses, and a blur or a hidden tab after it does not res
 });
 
 test('a lock granted after the shift paused is given back', async ({ page }) => {
+  await noRealLock(page);
   const errors = trackErrors(page);
   await open(page);
   await start(page);
