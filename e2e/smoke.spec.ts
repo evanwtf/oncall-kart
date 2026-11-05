@@ -52,8 +52,17 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
   expect(await speed(page)).toBeGreaterThan(5);
   await expect(page.locator('.ticket-head')).toContainText('#0001');
 
+  // A fine pointer: no touch controls, no touch-only pause items.
+  await expect(page.locator('.touch')).toBeHidden();
+  expect(await page.evaluate(() => window.__oncallKart?.touchControls())).toBe(false);
+  if (process.env.SCREENSHOTS) {
+    await page.screenshot({ path: `screenshots/${test.info().project.name}-race.png` });
+  }
+
   await page.keyboard.press('KeyP');
   await expect.poll(() => screen(page)).toBe('paused');
+  await expect(page.locator('.menu-item', { hasText: 'Respawn' })).toBeHidden();
+  await expect(page.locator('.menu-item', { hasText: 'Auto-gas' })).toBeHidden();
   await page.keyboard.press('KeyP');
   await expect.poll(() => screen(page)).toBe('racing');
 

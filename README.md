@@ -19,8 +19,8 @@ Open the URL that `npm run dev` prints (it ends in `/oncall-kart/`).
 
 ## Play
 
-Live: <https://evanwtf.github.io/oncall-kart/>. It needs desktop Chrome or
-Safari with WebGL 2.
+Live: <https://evanwtf.github.io/oncall-kart/>. It needs Chrome or Safari
+with WebGL 2, on a desktop, a phone or a tablet.
 
 | Key       | Action         |
 | --------- | -------------- |
@@ -31,6 +31,22 @@ Safari with WebGL 2.
 | R         | Respawn        |
 | P / Esc   | Pause          |
 | Enter     | Confirm        |
+
+On a phone or a tablet, on-screen controls show on the track. Turn the
+phone sideways for the best view.
+
+| Control                     | Action                                      |
+| --------------------------- | ------------------------------------------- |
+| Left half: drag left, right | Steer                                       |
+| DRIFT (hold)                | Drift                                       |
+| BRAKE (hold)                | Brake, reverse                              |
+| GAS (hold)                  | Accelerate, when auto-gas is off            |
+| II (top right)              | Pause                                       |
+| Pause menu                  | Respawn; auto-gas on or off (on by default) |
+
+Tap the title to start. On setup, tap the laps and a driver, then Start.
+In the pause menu, tap an option to select it and tap it again to confirm.
+Mouse clicks work the same way.
 
 In menus, the arrow keys choose, Enter confirms and Esc goes back. Pick
 1, 3 or 10 laps and a driver on the setup screen. The ticket card (top

@@ -14,6 +14,8 @@ and the Pages deploy. Detailed plan:
 ## Phase 1b: touch controls
 
 On-screen controls for phones and tablets, after the desktop build is live.
+Shipped in 0.2.0. Detailed plan:
+[superpowers/plans/2026-11-04-oncall-kart-touch.md](superpowers/plans/2026-11-04-oncall-kart-touch.md).
 
 ## Phase 2: rivals, items, hazards
 

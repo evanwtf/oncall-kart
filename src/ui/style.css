@@ -76,9 +76,9 @@ body {
   cursor: pointer;
 }
 
-/* Text for one kind of player: the touch layer sets .touch on #ui. */
-#ui.touch .no-touch,
-#ui:not(.touch) .only-touch {
+/* Text for one kind of player: the game sets .touch-on on #ui. */
+#ui.touch-on .no-touch,
+#ui:not(.touch-on) .only-touch {
   display: none;
 }
 

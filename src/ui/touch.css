@@ -147,17 +147,17 @@
 }
 
 /* The HUD makes room for the controls and the safe areas. */
-#ui.touch .hud-left {
+#ui.touch-on .hud-left {
   top: calc(var(--safe-top) + 12px);
   left: calc(var(--safe-left) + 12px);
 }
 
-#ui.touch .ticket {
+#ui.touch-on .ticket {
   top: calc(var(--safe-top) + 12px);
   right: calc(var(--safe-right) + 72px);
 }
 
-#ui.touch .hud-speed {
+#ui.touch-on .hud-speed {
   right: auto;
   left: 50%;
   bottom: calc(var(--safe-bottom) + 12px);
@@ -166,8 +166,10 @@
 
 /* Small screens: a phone in either orientation. */
 @media (max-height: 500px), (max-width: 700px) {
+  /* A fixed line height: font metrics differ between systems. */
   .hud-left {
     padding: 6px 10px;
+    line-height: 1.15;
   }
 
   .hud-lap {
@@ -292,14 +294,15 @@
     grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 
-  #ui .ticket {
-    top: calc(var(--safe-top) + 84px);
+  #ui .ticket,
+  #ui.touch-on .ticket {
+    top: calc(var(--safe-top) + 92px);
     left: calc(var(--safe-left) + 12px);
     right: calc(var(--safe-right) + 12px);
     width: auto;
   }
 
-  #ui.touch .hud-speed {
+  #ui.touch-on .hud-speed {
     left: auto;
     transform: none;
     right: calc(var(--safe-right) + 16px);
@@ -313,8 +316,8 @@
 
 /* On the track only: in a menu it would cover the buttons. */
 @media (orientation: portrait) {
-  #ui.touch[data-screen='countdown'] .rotate-hint:not([hidden]),
-  #ui.touch[data-screen='racing'] .rotate-hint:not([hidden]) {
+  #ui.touch-on[data-screen='countdown'] .rotate-hint:not([hidden]),
+  #ui.touch-on[data-screen='racing'] .rotate-hint:not([hidden]) {
     position: absolute;
     left: 50%;
     top: 45%;

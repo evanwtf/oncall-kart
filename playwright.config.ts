@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
+/** Software WebGL for Chromium: the CI container has no GPU. */
+const SOFTWARE_GL = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 
 export default defineConfig({
   testDir: 'e2e',
@@ -18,13 +20,26 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testMatch: 'smoke.spec.ts',
+      use: { ...devices['Desktop Chrome'], launchOptions: { args: SOFTWARE_GL } },
+    },
+    { name: 'webkit', testMatch: 'smoke.spec.ts', use: { ...devices['Desktop Safari'] } },
+    // Phones in landscape, with touch. The iPhone is 667 x 375, the smallest
+    // screen the layout must fit.
+    {
+      name: 'mobile-webkit',
+      testMatch: 'touch.spec.ts',
+      use: { ...devices['iPhone SE (3rd gen) landscape'], hasTouch: true },
+    },
+    {
+      name: 'mobile-chromium',
+      testMatch: 'touch.spec.ts',
       use: {
-        ...devices['Desktop Chrome'],
-        // Software WebGL: the CI container has no GPU.
-        launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
+        ...devices['Pixel 7 landscape'],
+        hasTouch: true,
+        launchOptions: { args: SOFTWARE_GL },
       },
     },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: {
     command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,

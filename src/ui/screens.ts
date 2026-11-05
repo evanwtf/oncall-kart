@@ -97,6 +97,9 @@ function onTap(e: HTMLElement, fn: () => void): void {
 function button(cls: string, text: string | undefined, parent: HTMLElement): HTMLButtonElement {
   const b = el('button', cls, text, parent);
   b.type = 'button';
+  // Out of the tab order: the arrow keys drive the menus, and a focused button
+  // would also act on Enter, doubling the keyboard's confirm.
+  b.tabIndex = -1;
   return b;
 }
 
@@ -209,7 +212,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   return {
     render(state) {
       current = state;
-      root.classList.toggle('touch', state.touch);
+      root.classList.toggle('touch-on', state.touch);
       if (state.screen !== lastScreen) {
         show(state.screen);
         lastScreen = state.screen;
