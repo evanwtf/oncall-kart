@@ -174,6 +174,7 @@ test('items, a Page, and the results of an 8-kart race', async ({ page }) => {
   // The autopilot drives the rest; a Page goes at the kart ahead.
   await page.evaluate(() => window.__oncallKart?.autopilot?.(true));
   await page.evaluate(() => window.__oncallKart?.giveItem?.('page'));
+  await expect(page.locator('.hud-item')).toContainText('PAGE');
   await page.keyboard.press('ShiftLeft');
   await expect(page.locator('.hud-item')).toContainText('NO ITEM');
   await page.waitForTimeout(300);
