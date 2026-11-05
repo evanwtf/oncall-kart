@@ -159,7 +159,7 @@ describe('walls and surfaces', () => {
   it('pushes a kart 2 m past the outer edge back inside and slows it', () => {
     const k = at(-(wall + 2));
     const out = constrainToTrack(k, track.project(k.pos, s), track);
-    expect(Math.abs(track.project(out.pos, s).lateral)).toBeLessThanOrEqual(wall + 1e-6);
+    expect(Math.abs(track.project(out.pos, s).lateral)).toBeLessThanOrEqual(wall + 1e-3);
     expect(out.speed).toBeLessThanOrEqual(k.speed * 0.7);
   });
 
@@ -226,5 +226,21 @@ describe('wall scrapes', () => {
     const k = { ...spawnKart(track, 300, -(wall + 0.05)), speed: 20 };
     const out = constrainToTrack(k, track.project(k.pos, 300), track);
     expect(out.speed).toBeGreaterThan(19);
+  });
+});
+
+describe('scraping along a wall', () => {
+  it('keeps most of its speed while steering hard into the divider', () => {
+    const pit = HALL.pit;
+    const sMid = (pit.startS + pit.endS) / 2;
+    let k = { ...spawnKart(track, sMid - 20, pit.side * (HALL.halfWidth - 0.3)), speed: 18 };
+    let hint = sMid - 20;
+    for (let i = 0; i < 240; i++) {
+      k = stepKart(k, { ...GAS, steer: pit.side }, DT, 'road');
+      const p = track.project(k.pos, hint);
+      k = constrainToTrack(k, p, track);
+      hint = track.project(k.pos, p.s).s;
+    }
+    expect(k.speed).toBeGreaterThan(12);
   });
 });

@@ -74,14 +74,40 @@ describe('HALL', () => {
     expect(L).toBeLessThan(800);
   });
 
-  it('has 6 gate rows at least 60 m apart', () => {
+  it('has 5 gate rows at least 60 m apart', () => {
     const rows = HALL.gateRowFractions.map((f) => f * L);
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(5);
     for (let i = 0; i < rows.length; i++) {
       const a = rows[i] as number;
       const b = rows[(i + 1) % rows.length] as number;
       expect(wrapS(b - a, L)).toBeGreaterThanOrEqual(60);
     }
+  });
+
+  const heading = (s: number) => {
+    const t = hall.tangentAt(s);
+    return Math.atan2(t.x, t.z);
+  };
+  const turnDeg = (a: number, b: number) =>
+    (Math.abs(Math.atan2(Math.sin(heading(b) - heading(a)), Math.cos(heading(b) - heading(a)))) *
+      180) /
+    Math.PI;
+
+  it('puts each gate row on a straight approach or on the fast sweeper', () => {
+    for (const f of HALL.gateRowFractions) {
+      const s = f * L;
+      const straight = turnDeg(s - 50, s) < 20;
+      // The sweeper: no point in the 30 m before the row is tighter than 45 m radius.
+      let minRadius = Infinity;
+      for (let x = s - 30; x <= s; x += 1)
+        minRadius = Math.min(minRadius, 4 / ((turnDeg(x - 2, x + 2) * Math.PI) / 180 || 1e-9));
+      expect(straight || minRadius >= 45, `row at s=${s.toFixed(0)}`).toBe(true);
+    }
+  });
+
+  it('puts most gate rows on a straight approach (under 20 degrees over 50 m)', () => {
+    const straight = HALL.gateRowFractions.filter((f) => turnDeg(f * L - 50, f * L) < 20);
+    expect(straight.length).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps every gate row out of the pit span', () => {

@@ -19,10 +19,10 @@ import { createUi, PAUSE_LABELS as PAUSE_ITEMS, type Screen, type UiState } from
 export const LAP_CHOICES: readonly LapCount[] = [1, 3, 10];
 /**
  * Longest frame the loop catches up on, in fixed steps. Longer than
- * TUNING.maxFrame so a slow machine (software GL at 2-5 fps) still runs the race
+ * TUNING.maxFrame so a slow machine (software GL at 4-10 fps) still runs the race
  * in real time; each step is still 1/120 s, so nothing tunnels.
  */
-const MAX_CATCH_UP = 0.5;
+const MAX_CATCH_UP = 0.25;
 /** Seconds the results wait after the player crosses the line. */
 const FINISH_DELAY = 1.5;
 

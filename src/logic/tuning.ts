@@ -5,8 +5,8 @@ export const TUNING = {
   // Tickets. SLA time = slaBase + slaPerStep * number of steps.
   slaBase: 30,
   slaPerStep: 15,
-  /** Share of gate rows with 2 gates; the rest have 3. */
-  twoGateRowShare: 0.25,
+  /** Share of gate rows with 2 gates; the rest have 3. 0: every row has 3. */
+  twoGateRowShare: 0,
 
   // Speed, in m/s and m/s².
   topSpeed: 21,
@@ -18,7 +18,7 @@ export const TUNING = {
   reverseSpeed: 6,
   reverseAccel: 8,
   offroadTopSpeed: 10,
-  pitSpeedLimit: 12,
+  pitSpeedLimit: 18,
   /** Off-road strip beside the road, out to the soft wall. */
   offroadWidth: 5,
   /** Share of speed a kart keeps when it hits a wall. */
@@ -55,8 +55,8 @@ export const TUNING = {
   /** Spin after a wrong gate: the time penalty. */
   wrongGateSpin: 0.9,
   ticketCloseBoost: 1.2,
-  /** Time held in the pit while the tech works. */
-  pitHold: 2,
+  /** Time held at the pit box while the tech works. */
+  pitHold: 1,
   /** Slowdown after an SLA breach. */
   slaSlow: 2.5,
   respawnHold: 0.8,
@@ -66,7 +66,11 @@ export const TUNING = {
   stuckRespawn: 2.5,
   /** Below this speed (m/s) a kart under throttle counts as stuck. */
   stuckSpeed: 1,
-  /** Largest frame the logic accepts; a longer frame is cut to this. */
+  /**
+   * Largest dt one stepRace call accepts; a longer dt is cut to this. The game
+   * loop has its own catch-up limit (MAX_CATCH_UP in game.ts) and calls
+   * stepRace once per fixed step.
+   */
   maxFrame: 0.1,
   /** Fixed logic step. */
   step: 1 / 120,

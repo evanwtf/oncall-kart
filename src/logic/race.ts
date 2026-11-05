@@ -137,9 +137,16 @@ function doStep(race: Race, k: KartRuntime, step: Step, events: RaceEvent[]): vo
   }
 }
 
+/** s of the pit box: the middle of the walled section of the pit lane. */
+export function pitBoxS(track: Track): number {
+  const { pit } = track.def;
+  return (pit.startS + pit.entryLen + pit.endS - pit.exitLen) / 2;
+}
+
 export function respawn(race: Race, kartId: number): RaceEvent[] {
   const k = race.karts[kartId];
-  if (!k) return [];
+  // A held kart (pit work, a respawn in progress) cannot respawn: no skipping the pit.
+  if (!k || k.kart.holdTime > 0) return [];
   k.kart = { ...spawnKart(race.track, k.proj.s, 0), holdTime: TUNING.respawnHold };
   k.proj = { s: k.proj.s, lateral: 0 };
   k.offroadTime = 0;
@@ -201,8 +208,8 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
       }
     });
 
-    // Pit: entering the lane serves a PIT step once per ticket.
-    if (surface === 'pit' && prevSurface !== 'pit') {
+    // Pit: the pit box serves a PIT step, once per ticket.
+    if (surface === 'pit' && crossedForward(pitBoxS(track), prev.s, proj.s, track.length)) {
       const work = k.ticket.type.pitWork;
       if (nextStep(k.ticket) === 'PIT' && k.pitServedTicket !== k.ticket.number) {
         k.pitServedTicket = k.ticket.number;

@@ -24,25 +24,31 @@ const sketch: readonly Vec2[] = [
   { x: -72, z: 112 },
   { x: -48, z: 104 },
   { x: -40, z: 74 },
-  { x: -50, z: 22 },
-  { x: -68, z: -30 },
-  { x: -98, z: -70 },
-  { x: -112, z: -112 },
-  { x: -92, z: -158 },
-  { x: -50, z: -178 },
-  { x: -14, z: -160 },
+  // The back aisle: a straight run home with two gate rows.
+  { x: -46, z: 30 },
+  { x: -52, z: -20 },
+  { x: -58, z: -70 },
+  { x: -64, z: -112 },
+  { x: -62, z: -148 },
+  { x: -50, z: -174 },
+  { x: -28, z: -186 },
+  { x: -8, z: -176 },
+  { x: 0, z: -146 },
 ];
 
 /**
  * The data-centre hall. Travel starts north (+z) up the loading-dock straight,
  * which holds the finish line (s = 0), the grid and the pit lane on the left.
- * Then a wide right turn, a fast sweeper, a hairpin and the back aisle home.
+ * Then a wide right turn, a fast sweeper, two hairpins, the back aisle and a
+ * last hairpin onto the straight.
  */
 export const HALL: TrackDef = {
   name: 'Data-centre hall',
   controlPoints: sketch.map((p) => ({ x: p.x * K, z: p.z * K })),
   halfWidth: 9,
-  gateRowFractions: [0.31, 0.42, 0.53, 0.64, 0.76, 0.88],
+  // s = 150 (after the pit exit), 239 and 324 (the sweeper), 565 and 640
+  // (the back aisle). The hairpins and the final corner hold no rows.
+  gateRowFractions: [0.199, 0.3171, 0.4298, 0.7495, 0.849],
   sectorCount: 4,
   pit: {
     startS: 28,

@@ -221,13 +221,18 @@ export function constrainToTrack(k: KartState, p: Projection, track: Track): Kar
   const trackHeading = Math.atan2(t.x, t.z);
   const along = trackHeading + (Math.cos(k.heading - trackHeading) < 0 ? Math.PI : 0);
   const d = Math.atan2(Math.sin(along - k.heading), Math.cos(along - k.heading));
-  // A head-on hit or a deep one costs the most; a scrape at a shallow angle costs little.
-  const severity = clamp(Math.max(Math.abs(Math.sin(d)) * 1.5, Math.abs(shift) / 1.5), 0, 1);
+  // A hit (steep or deep) costs speed by its severity. A scrape at a shallow
+  // angle loses only the speed into the wall, so sliding along a wall while
+  // steering into it does not grind the kart to a stop.
+  const steep = Math.abs(Math.sin(d));
+  const hit = steep > 0.25 || Math.abs(shift) > 0.5;
+  const severity = clamp(Math.max(steep * 1.5, Math.abs(shift) / 1.5), 0, 1);
+  const keep = hit ? 1 - (1 - TUNING.wallSpeedKeep) * severity : Math.cos(d);
   return {
     ...k,
     pos,
     heading: k.heading + d * 0.5,
-    speed: k.speed * (1 - (1 - TUNING.wallSpeedKeep) * severity),
+    speed: k.speed * keep,
     driftDir: 0,
     driftTime: 0,
   };

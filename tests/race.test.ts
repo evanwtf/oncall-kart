@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { NO_INPUT, spawnKart, type KartInput } from '../src/logic/kart';
+import { NO_INPUT, spawnKart, surfaceAt, type KartInput } from '../src/logic/kart';
 import type { Op } from '../src/logic/ops';
-import { createRace, respawn, stepRace, type Race, type RaceEvent } from '../src/logic/race';
+import {
+  createRace,
+  pitBoxS,
+  respawn,
+  stepRace,
+  type Race,
+  type RaceEvent,
+} from '../src/logic/race';
 import { TICKET_TYPES } from '../src/logic/runbooks';
 import { buildTrack } from '../src/logic/track';
 import { HALL } from '../src/logic/tracks/hall';
@@ -201,19 +208,36 @@ describe('pit', () => {
     return ev.concat(driveFor(r, 0.5, GAS));
   };
 
-  it('serves a PIT step: hold, event and one advance per ticket', () => {
-    const r = newRace();
-    toGo(r);
-    const p = player(r);
+  const pit = HALL.pit;
+  const lane = pit.side * pit.centerOffset;
+  const boxS = pitBoxS(track);
+  const diskTicket = (r: Race, stepIndex: number) => {
     const disk = TICKET_TYPES.find((t) => t.id === 'failed-disk');
     if (!disk) throw new Error('type');
-    p.ticket = { ...p.ticket, type: disk, stepIndex: 1, deadline: 999 };
+    const p = player(r);
+    p.ticket = { ...p.ticket, type: disk, stepIndex, deadline: 999 };
+    return p;
+  };
+  const placeInLane = (r: Race, s: number, lateral = lane, speed = 10) => {
+    const p = player(r);
+    p.kart = { ...spawnKart(track, s, lateral), speed };
+    p.proj = { s, lateral };
+  };
+
+  it('puts the pit box in the walled section of the lane', () => {
+    expect(boxS).toBeGreaterThan(pit.startS + pit.entryLen);
+    expect(boxS).toBeLessThan(pit.endS - pit.exitLen);
+  });
+
+  it('serves a PIT step at the pit box: hold, event and one advance per ticket', () => {
+    const r = newRace();
+    toGo(r);
+    const p = diskTicket(r, 1);
+    placeInLane(r, boxS - 6);
     let held = 0;
     const ev: RaceEvent[] = [];
-    p.kart = { ...spawnKart(track, pitS, HALL.pit.side * (HALL.halfWidth - 1)), speed: 10 };
-    p.proj = { s: pitS, lateral: HALL.pit.side * (HALL.halfWidth - 1) };
     for (let i = 0; i < 120 * 2 && held === 0; i++) {
-      const e = stepRace(r, [{ ...GAS, steer: HALL.pit.side * 0.6 }], 1 / 120);
+      const e = stepRace(r, [GAS], 1 / 120);
       ev.push(...e);
       if (e.some((x) => x.type === 'pit-service')) held = player(r).kart.holdTime;
     }
@@ -221,6 +245,47 @@ describe('pit', () => {
     expect(held).toBeCloseTo(TUNING.pitHold, 5);
     expect(player(r).ticket.stepIndex).toBe(2);
     expect(player(r).pitServedTicket).toBe(p.ticket.number);
+  });
+
+  it('does not serve PIT on the first touch of the pit surface at the entry', () => {
+    const r = newRace();
+    toGo(r);
+    diskTicket(r, 1);
+    placeInLane(r, pit.startS + 2, pit.side * (pit.centerOffset - pit.halfWidth + 0.5));
+    const ev = driveFor(r, 0.4);
+    expect(types(ev)).not.toContain('pit-service');
+    expect(player(r).ticket.stepIndex).toBe(1);
+  });
+
+  it('does not serve PIT on a dip into the exit opening', () => {
+    const r = newRace();
+    toGo(r);
+    diskTicket(r, 1);
+    // From the road, steer into the exit opening and back out.
+    const s0 = pit.endS - pit.exitLen + 2;
+    placeInLane(r, s0, pit.side * (HALL.halfWidth - 1), 12);
+    const ev: RaceEvent[] = [];
+    let touchedPit = false;
+    for (let i = 0; i < 180; i++) {
+      const steer = (i < 60 ? 1 : -1) * pit.side * 0.7;
+      ev.push(...stepRace(r, [{ ...GAS, steer }], 1 / 120));
+      if (surfaceAt(player(r).proj, track) === 'pit') touchedPit = true;
+    }
+    expect(touchedPit).toBe(true);
+    expect(types(ev)).not.toContain('pit-service');
+    expect(player(r).ticket.stepIndex).toBe(1);
+  });
+
+  it('ignores a respawn while the kart is held in the pit', () => {
+    const r = newRace();
+    toGo(r);
+    diskTicket(r, 1);
+    placeInLane(r, boxS - 3);
+    driveFor(r, 0.5);
+    expect(player(r).kart.holdTime).toBeGreaterThan(0);
+    const before = { ...player(r).kart.pos };
+    expect(respawn(r, 0)).toEqual([]);
+    expect(player(r).kart.pos).toEqual(before);
   });
 
   it('changes nothing when the next step is not PIT', () => {
