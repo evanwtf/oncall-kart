@@ -28,7 +28,9 @@ Phase 2: seven bot rivals, items and hazards.
   saved you.
 - The results show the finishing order of all 8, frozen when you cross the
   line, then your shift report.
-- The same seed and inputs give the same race at any frame rate.
+- The logic runs in fixed steps, so the same seed and the same per-step
+  inputs give the same race at any frame rate. The game reads your input
+  once per frame, so a human run does not replay exactly.
 
 ## 0.2.0
 
