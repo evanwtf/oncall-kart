@@ -326,6 +326,13 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     };
     hooks.setClockLeft = (s: number) => {
       shift.time = Math.max(0, SHOOTER_TUNING.shiftSeconds - s);
+      // A jump of the clock skips the breaks it passes over, rather than firing them all at once.
+      while (
+        shift.nextBreak < shift.schedule.length &&
+        (shift.schedule[shift.nextBreak] ?? 0) <= shift.time
+      ) {
+        shift.nextBreak += 1;
+      }
     };
   }
 }

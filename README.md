@@ -1,8 +1,13 @@
 # oncall-kart
 
-A browser kart racer where the race is the on-call queue. Each kart carries a
-hardware ticket. You close it by driving through operation gates in runbook
-order.
+Two browser games about being on call:
+
+- **oncall-kart**, a kart racer where the race is the on-call queue. Each
+  kart carries a hardware ticket. You close it by driving through operation
+  gates in runbook order.
+- **Zero Down**, a first-person shift on a data-centre floor. Servers break
+  at random. You walk to each broken rack and work through its runbook, and
+  you apply every security patch before the shift ends.
 
 ## Bootstrap
 
@@ -20,7 +25,22 @@ Open the URL that `npm run dev` prints (it ends in `/oncall-kart/`).
 ## Play
 
 Live: <https://evanwtf.github.io/oncall-kart/>. It needs Chrome or Safari
-with WebGL 2, on a desktop, a phone or a tablet.
+with WebGL 2. The kart game runs on a desktop, a phone or a tablet. Zero
+Down needs a mouse and a keyboard.
+
+The first screen picks the game: the arrow keys and Enter, a click or a tap.
+A link can skip the start screen:
+
+```sh
+export SITE=https://evanwtf.github.io/oncall-kart/
+open "$SITE?game=kart"
+open "$SITE?game=shooter"
+```
+
+The kart title screen has a **Switch game** button. Zero Down returns to the
+start screen from its briefing, its pause menu and its shift report.
+
+### oncall-kart
 
 | Key       | Action         |
 | --------- | -------------- |
@@ -63,13 +83,44 @@ In menus, the arrow keys choose, Enter confirms and Esc goes back. Pick
 right) shows the runbook: drive through the gate that matches the next
 step. A `PIT` step means the pit lane on the left of the dock straight.
 
+### Zero Down
+
+A shift lasts 3 minutes. The briefing lists the patches due this shift.
+Click to start: the game takes the mouse, and Esc gives it back.
+
+| Key              | Action                          |
+| ---------------- | ------------------------------- |
+| W A S D / arrows | Move and strafe                 |
+| Mouse            | Look                            |
+| 1-9              | Pick a step at a broken rack    |
+| E (hold)         | Work: a runbook step or a patch |
+| P / Esc          | Pause                           |
+
+A broken rack shows a red beacon, and its ticket card shows the runbook
+with the next step in color. Face the rack, pick the step with its number
+key, then hold E until the bar fills. If you move or let go, the step
+stops. A wrong step fills the bar, then fails. A patch target has a blue
+marker: face it and hold E. The floor map (bottom right) shows you, the
+broken racks in red and the patch targets in blue.
+
+At 0:00 the shift ends:
+
+| Ending      | When                                                    |
+| ----------- | ------------------------------------------------------- |
+| Clean shift | Every patch applied and no server broken                |
+| Rough shift | Every patch applied, but one or more servers are broken |
+| Fired       | A patch not applied                                     |
+
+The pause menu sets the mouse sensitivity. The game remembers it.
+
 ## Edit the runbooks
 
 The ticket types live in `src/logic/runbooks.ts`. Each type has an id, a
 title and a list of steps. A step is an operation (`MAINT`, `TAKEDOWN`,
 `POWERON`, `REINSTATE`, `FW-ISO`, `LOGCOLLECT`, `META-SYNC`, `REIMAGE`) or
 `PIT`. A type with a `PIT` step also needs `pitWork`, the text the pit crew
-shows. Run `npm test` after an edit.
+shows. Both games use this file: in Zero Down, `PIT` is the hands-on work at
+the rack, and the rack panel shows `pitWork`. Run `npm test` after an edit.
 
 ## Develop
 

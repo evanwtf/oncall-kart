@@ -20,10 +20,14 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testMatch: 'smoke.spec.ts',
+      testMatch: ['smoke.spec.ts', 'shooter.spec.ts'],
       use: { ...devices['Desktop Chrome'], launchOptions: { args: SOFTWARE_GL } },
     },
-    { name: 'webkit', testMatch: 'smoke.spec.ts', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'webkit',
+      testMatch: ['smoke.spec.ts', 'shooter.spec.ts'],
+      use: { ...devices['Desktop Safari'] },
+    },
     // Phones in landscape, with touch. The iPhone is 667 x 375, the smallest
     // screen the layout must fit.
     {

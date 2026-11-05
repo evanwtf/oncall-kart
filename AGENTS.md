@@ -1,11 +1,15 @@
 # oncall-kart
 
-A browser kart racer where the race is the on-call queue. You close hardware
-tickets by driving through operation gates in runbook order. It is for team
-fun. TypeScript, Vite and three.js; static files on GitHub Pages.
+Two browser games about being on call, for team fun. The kart racer: the race
+is the on-call queue, and you close hardware tickets by driving through
+operation gates in runbook order. Zero Down: a first-person shift on a
+data-centre floor, where you fix broken racks and apply patches. A start
+screen picks the game. TypeScript, Vite and three.js; static files on GitHub
+Pages.
 
 Live site: <https://evanwtf.github.io/oncall-kart/>.
-Design: [docs/superpowers/specs/2026-11-04-oncall-kart-design.md](docs/superpowers/specs/2026-11-04-oncall-kart-design.md).
+Designs: [the kart game](docs/superpowers/specs/2026-11-04-oncall-kart-design.md)
+and [Zero Down](docs/superpowers/specs/2026-11-05-oncall-shooter-design.md).
 Phases: [docs/plan.md](docs/plan.md).
 
 ## Commands
@@ -44,16 +48,26 @@ uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
 
 ## Layout
 
+- `src/main.ts` routes `?game=kart` and `?game=shooter`; with neither, it
+  shows the start screen (`src/picker.ts`).
 - `src/logic/`: pure game logic (tickets, runbooks, gates, laps, karts, race).
 - `src/render/`: three.js scene. `src/ui/`: DOM screens and HUD.
-- `src/logic/runbooks.ts`: the ticket types. Anyone can edit it.
-- `tests/`: Vitest, one file per logic module. `e2e/`: Playwright.
+- `src/logic/runbooks.ts`: the ticket types, for both games. Anyone can edit
+  it.
+- `src/shooter/`: Zero Down. `logic/` is its pure logic (floor, movement,
+  the shift); `render/` is the three.js scene; `ui/` holds the screens and
+  the HUD; `game.ts` is the loop and the debug hooks. It imports the shared
+  pieces (`ops.ts`, `runbooks.ts`, `ticket.ts`, `rng.ts`) from `src/logic/`
+  and never copies them.
+- `tests/`: Vitest, one file per logic module; `tests/shooter/` for Zero
+  Down. `e2e/`: Playwright.
 - `scripts/`: repo guards, tested in `tests/`.
 
 ## Rules for this repo
 
-- **`src/logic` never imports three or touches the DOM.** Unit tests run it
-  in Node. ESLint enforces the rule.
+- **`src/logic` and `src/shooter/logic` never import three or touch the
+  DOM.** Unit tests run them in Node. ESLint enforces the rule for both
+  folders.
 - **Every push to `main` deploys the live site.** CI checks, runs the smoke
   tests, then publishes to Pages.
 - **Delivery:** push to `main` until the game has real users (baseline
@@ -83,8 +97,9 @@ uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
   hook refuses them. See
   [git-and-prs.md](https://github.com/evanwtf/baseline/blob/main/conventions/git-and-prs.md).
 - **Original work only.** No names, characters, items, tracks, music or logos
-  from any existing kart game. No real company or brand names. See the
-  anti-goals in the design.
+  from any existing kart game or shooter. No real company or brand names,
+  no real CVE numbers and no real vulnerability nicknames. See the
+  anti-goals in each design.
 
 ## Reading table
 
@@ -95,4 +110,5 @@ uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
 | Changing CI                      | `~/git/baseline/conventions/ci.md` ([GitHub](https://github.com/evanwtf/baseline/blob/main/conventions/ci.md))                     |
 | Changing hooks                   | `~/git/baseline/conventions/pre-commit.md` ([GitHub](https://github.com/evanwtf/baseline/blob/main/conventions/pre-commit.md))     |
 | Writing docs or comments         | `~/git/baseline/conventions/writing.md` ([GitHub](https://github.com/evanwtf/baseline/blob/main/conventions/writing.md))           |
-| Changing gameplay                | [the design](docs/superpowers/specs/2026-11-04-oncall-kart-design.md)                                                              |
+| Changing kart gameplay           | [the kart design](docs/superpowers/specs/2026-11-04-oncall-kart-design.md)                                                         |
+| Changing Zero Down gameplay      | [the shooter design](docs/superpowers/specs/2026-11-05-oncall-shooter-design.md)                                                   |

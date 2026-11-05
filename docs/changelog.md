@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.0
+
+A second game, Zero Down, and a start screen that picks the game.
+
+- The first screen offers two cards: the kart game and Zero Down. The
+  arrow keys and Enter, a click or a tap pick one. `?game=kart` and
+  `?game=shooter` skip the start screen. The kart title screen has a
+  Switch game button.
+- Zero Down, phase 1 ("walk and fix"): a first-person, 3-minute shift on a
+  data-centre floor of 640 racks. The floor has two data halls, a network
+  room, a break room where the shift starts, and a loading dock. W A S D
+  moves; the mouse looks, through Pointer Lock.
+- Six servers break at random in a shift. A broken rack shows a red beacon
+  and a ticket card with its runbook and SLA. The ticket types come from
+  the kart game's `runbooks.ts`. Pick a step with 1-9 and hold E to work:
+  2 s for an operation, 4 s for hands-on work. Moving or letting go stops
+  the step. A wrong step fills the bar, then fails.
+- Three made-up security patches per shift, on a switch, a firewall and a
+  rack. Hold E at the target for 3 s. A missed patch gets you fired.
+- Three endings: clean shift, rough shift, fired, with a shift report.
+- The pause menu sets the mouse sensitivity. A hidden tab, a lost focus or
+  a lost mouse lock pauses the shift.
+- Vendors, the money gun, sound and touch come in later phases.
+
 ## 0.4.0
 
 Phase 3: sound, an original tune, and render polish.
