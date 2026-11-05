@@ -154,7 +154,8 @@ test('a shift: walk, fix a rack, a wrong step, pause, and fired at 0:00', async 
 });
 
 test('every patch applied and nothing broken: a clean shift', async ({ page }) => {
-  test.setTimeout(150_000);
+  // 2.1 min in the CI container with software GL; keep head room on the shared runner.
+  test.setTimeout(240_000);
   const errors = trackErrors(page);
   await open(page);
   await start(page);
