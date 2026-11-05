@@ -98,6 +98,14 @@ describe('keyboard', () => {
     expect(kb.takeActions()).toEqual(['up', 'down', 'left', 'right']);
   });
 
+  it('clears held keys on a Meta keyup (macOS drops keyups while Cmd is held)', () => {
+    kb = createKeyboard(window);
+    down('ArrowUp');
+    down('MetaLeft');
+    up('MetaLeft');
+    expect(kb.read().throttle).toBe(0);
+  });
+
   it('stops listening after dispose', () => {
     kb = createKeyboard(window);
     kb.dispose();

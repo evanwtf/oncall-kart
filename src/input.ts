@@ -50,7 +50,9 @@ export function createKeyboard(target: Window): Keyboard {
     if (action) queue.push(action);
   };
   const onUp = (e: KeyboardEvent) => {
-    held.delete(e.code);
+    // macOS sends no keyup for keys released while Cmd is down: clear them all.
+    if (e.code === 'MetaLeft' || e.code === 'MetaRight') held.clear();
+    else held.delete(e.code);
   };
   // A key released while the window has no focus never sends keyup: clear all.
   const clear = () => held.clear();

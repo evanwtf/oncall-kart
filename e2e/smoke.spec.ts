@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import pkg from '../package.json' with { type: 'json' };
 import { TUNING } from '../src/logic/tuning';
 
 const hooks = (page: Page) =>
@@ -31,7 +32,7 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
   page.on('pageerror', (err) => errors.push(err.message));
 
   await page.goto('/oncall-kart/?seed=1');
-  await expect(page.locator('#ui')).toContainText('v0.1.0');
+  await expect(page.locator('#ui')).toContainText(`v${pkg.version}`);
   await expect.poll(() => screen(page)).toBe('title');
 
   // The canvas holds a WebGL 2 context.
@@ -57,6 +58,7 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
   await expect.poll(() => screen(page)).toBe('racing');
 
   // Restart twice from the pause menu (Escape, Down to Restart, Enter).
+  const memory: { geometries: number; textures: number }[] = [];
   for (let i = 0; i < 2; i++) {
     await page.keyboard.press('Escape');
     await expect.poll(() => screen(page)).toBe('paused');
@@ -64,8 +66,20 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
     await page.keyboard.press('Enter');
     await expect.poll(() => screen(page)).toBe('countdown');
     await waitRacing(page);
+    memory.push(
+      await page.evaluate(() => {
+        const info = window.__oncallKart?.renderInfo();
+        return { geometries: info?.geometries ?? -1, textures: info?.textures ?? -2 };
+      }),
+    );
   }
-  // A fresh race: no doubled speed from stacked state.
+  // A restart frees what it replaces: no meshes or textures pile up.
+  expect(memory[1]).toEqual(memory[0]);
+
+  // A fresh race: the clock runs at about wall time (no doubled loop) and
+  // the kart is no faster than top speed (no stacked state).
+  const t0 = await page.evaluate(() => window.__oncallKart?.raceTime() ?? 0);
+  const w0 = Date.now();
   await page.keyboard.down('ArrowUp');
   let max = 0;
   for (let i = 0; i < 10; i++) {
@@ -73,6 +87,10 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
     max = Math.max(max, await speed(page));
   }
   await page.keyboard.up('ArrowUp');
+  const raceSeconds = (await page.evaluate(() => window.__oncallKart?.raceTime() ?? 0)) - t0;
+  const wallSeconds = (Date.now() - w0) / 1000;
+  expect(raceSeconds).toBeGreaterThan(wallSeconds * 0.6);
+  expect(raceSeconds).toBeLessThan(wallSeconds * 1.15);
   expect(max).toBeGreaterThan(5);
   expect(max).toBeLessThanOrEqual(TUNING.topSpeed + 1e-6);
 

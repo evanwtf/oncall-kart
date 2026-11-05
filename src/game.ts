@@ -1,5 +1,5 @@
 import { createKeyboard, type Action } from './input';
-import { NO_INPUT } from './logic/kart';
+import { NO_INPUT, spawnKart } from './logic/kart';
 import {
   createRace,
   respawn,
@@ -33,8 +33,14 @@ export interface DebugHooks {
   playerSpeed(): number;
   playerLap(): number;
   playerTicket(): { number: number; title: string; next: string | null } | null;
-  /** Draw calls and triangles in the last frame. */
-  renderInfo(): { calls: number; triangles: number };
+  /** Race clock in seconds. */
+  raceTime(): number;
+  /** Draw calls and triangles in the last frame; live geometries and textures. */
+  renderInfo(): { calls: number; triangles: number; geometries: number; textures: number };
+  /** Gate row positions (s, metres). */
+  rowS(): number[];
+  /** Only with ?debug=1: put the player at s on the centerline, at rest. */
+  placePlayer?(s: number): void;
 }
 
 declare global {
@@ -151,17 +157,19 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     }
   };
 
-  const onVisibility = () => {
-    if (
-      document.visibilityState === 'hidden' &&
-      (state.screen === 'racing' || state.screen === 'countdown')
-    ) {
+  const autoPause = () => {
+    if (state.screen === 'racing' || state.screen === 'countdown') {
       pausedFrom = state.screen;
       state.screen = 'paused';
       state.pauseIndex = 0;
     }
   };
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') autoPause();
+  };
   document.addEventListener('visibilitychange', onVisibility);
+  // A window that loses focus gets no key events: pause rather than coast.
+  window.addEventListener('blur', autoPause);
 
   const frame = (now: number) => {
     const dt = Math.min(MAX_CATCH_UP, Math.max(0, (now - last) / 1000));
@@ -200,9 +208,22 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       const t = player()?.ticket;
       return t ? { number: t.number, title: t.type.title, next: nextStep(t) } : null;
     },
+    raceTime: () => race.time,
     renderInfo: () => ({
       calls: scene.renderer.info.render.calls,
       triangles: scene.renderer.info.render.triangles,
+      geometries: scene.renderer.info.memory.geometries,
+      textures: scene.renderer.info.memory.textures,
     }),
+    rowS: () => race.board.map((r) => r.s),
   };
+  if (new URLSearchParams(window.location.search).get('debug') === '1') {
+    window.__oncallKart.placePlayer = (s: number) => {
+      const k = player();
+      if (!k) return;
+      k.kart = spawnKart(track, s, 0);
+      k.proj = { s, lateral: 0 };
+      scene.capture(race);
+    };
+  }
 }
