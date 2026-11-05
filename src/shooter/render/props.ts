@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { canvasTexture } from '../../render/textures';
 import type { Shift } from '../logic/shift';
+import { SHOOTER_TUNING } from '../logic/tuning';
 
 /**
  * Money and pickups on screen: bills in flight, lures (bills on the
@@ -23,7 +24,7 @@ export interface GunView {
 }
 
 const MAX_BILLS = 400;
-const MAX_LURES = 96;
+const MAX_LURES = SHOOTER_TUNING.maxLures;
 const MAX_POS = 8;
 const BILL_HEIGHT = 1.25;
 

@@ -187,3 +187,54 @@ export function flowDir(
   out.z = tz / len;
   return out;
 }
+
+/**
+ * True when the segment (x0, z0) → (x1, z1) passes through no box grown by
+ * `grow` on each side. Touching a face does not count. A slab test, with a
+ * quick reject on the segment's bounds first.
+ */
+export function segmentClear(
+  boxes: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[],
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  grow: number,
+): boolean {
+  const eps = 1e-6;
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  const loX = Math.min(x0, x1);
+  const hiX = Math.max(x0, x1);
+  const loZ = Math.min(z0, z1);
+  const hiZ = Math.max(z0, z1);
+  for (const b of boxes) {
+    const minX = b.minX - grow + eps;
+    const maxX = b.maxX + grow - eps;
+    const minZ = b.minZ - grow + eps;
+    const maxZ = b.maxZ + grow - eps;
+    if (hiX <= minX || loX >= maxX || hiZ <= minZ || loZ >= maxZ) continue;
+    let t0 = 0;
+    let t1 = 1;
+    if (dx === 0) {
+      if (x0 <= minX || x0 >= maxX) continue;
+    } else {
+      let a = (minX - x0) / dx;
+      let c = (maxX - x0) / dx;
+      if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, c);
+    }
+    if (dz === 0) {
+      if (z0 <= minZ || z0 >= maxZ) continue;
+    } else {
+      let a = (minZ - z0) / dz;
+      let c = (maxZ - z0) / dz;
+      if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, c);
+    }
+    if (t0 < t1) return false;
+  }
+  return true;
+}

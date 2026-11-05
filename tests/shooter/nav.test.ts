@@ -6,6 +6,7 @@ import {
   cellAt,
   flowDir,
   flowField,
+  segmentClear,
   type FlowField,
   type NavGrid,
 } from '../../src/shooter/logic/nav';
@@ -148,5 +149,18 @@ describe('flow field', () => {
     let zeros = 0;
     for (const d of f.dist) if (d === 0) zeros += 1;
     expect(zeros).toBe(1);
+  });
+});
+
+describe('segmentClear', () => {
+  const b = [{ minX: 0, maxX: 1, minZ: 0, maxZ: 1 }];
+  it('finds a segment through a box, and clears one beside it or touching it', () => {
+    expect(segmentClear(b, -1, 0.5, 2, 0.5, 0)).toBe(false);
+    expect(segmentClear(b, -1, 1.2, 2, 1.2, 0)).toBe(true);
+    expect(segmentClear(b, -1, 1.2, 2, 1.2, 0.3)).toBe(false);
+    expect(segmentClear(b, -1, 1, 2, 1, 0)).toBe(true);
+    expect(segmentClear(b, -1, -1, 2, 2, 0)).toBe(false);
+    expect(segmentClear(b, 0.5, -2, 0.5, -0.1, 0)).toBe(true);
+    expect(segmentClear(b, 0.5, 0.5, 0.5, 0.5, 0)).toBe(false);
   });
 });

@@ -7,11 +7,11 @@
  */
 import { pick, type Rng } from '../../logic/rng';
 import { frontPoint, type FloorDef } from './floor';
-import { cellAt, type NavGrid } from './nav';
+import { cellAt, segmentClear, type NavGrid } from './nav';
 import { moveWithCollision } from './player';
 import type { Shift, ShiftEvent, ShiftInput } from './shift';
 import { SHOOTER_TUNING } from './tuning';
-import { VENDOR_ROLES, isDistracted, walkVendor, type Vendor } from './vendors';
+import { VENDOR_ROLES, isDistracted, releaseLure, walkVendor, type Vendor } from './vendors';
 
 /** A bill in flight. */
 export interface Bill {
@@ -77,15 +77,20 @@ const POS = { x: 0, z: 0 };
 /** Slack for float sums of fixed steps. */
 const EPS = 1e-9;
 
-/** True when every sample along (x0, z0) → (x1, z1), but the last `skip` metres, is on open grid. */
-function clearLine(g: NavGrid, x0: number, z0: number, x1: number, z1: number, skip: number) {
-  const len = Math.hypot(x1 - x0, z1 - z0);
-  const n = Math.floor((len - skip) / (g.cell / 2));
-  for (let i = 1; i <= n; i++) {
-    const f = (i * (g.cell / 2)) / len;
-    if (g.open[cellAt(g, x0 + (x1 - x0) * f, z0 + (z1 - z0) * f)] !== 1) return false;
-  }
-  return true;
+/**
+ * A vendor can walk straight to a lure: the segment from the vendor to the
+ * point lureReach short of the lure clears every box grown by vendorRadius.
+ * The lure itself may lie against a face, inside the grown box; the vendor
+ * only needs to get within lureReach of it.
+ */
+function canReach(s: Shift, v: Vendor, l: Lure): boolean {
+  const t = SHOOTER_TUNING;
+  const dx = l.x - v.x;
+  const dz = l.z - v.z;
+  const d = Math.hypot(dx, dz);
+  if (d <= t.lureReach) return true;
+  const k = (d - t.lureReach) / d;
+  return segmentClear(s.boxes, v.x, v.z, v.x + dx * k, v.z + dz * k, t.vendorRadius);
 }
 
 function fireShot(s: Shift, events: ShiftEvent[]): void {
@@ -137,14 +142,20 @@ function trigger(s: Shift, input: ShiftInput, dt: number, events: ShiftEvent[]):
 export function distract(s: Shift, v: Vendor, seconds: number, events: ShiftEvent[]): void {
   v.distractedUntil = Math.max(v.distractedUntil, s.time + seconds);
   s.stats.vendorsDistracted += 1;
-  const g = v.goal;
-  if (typeof g === 'object' && 'lure' in g) {
-    // It drops its claim; another vendor may take that lure.
-    const lure = s.lures.find((l) => l.id === g.lure);
-    if (lure) lure.takenBy = null;
-    v.goal = 'player';
-  }
+  // It drops its claim; another vendor may take that lure.
+  releaseLure(s, v);
   events.push({ type: 'vendor-distracted', id: v.id, role: v.role });
+}
+
+/** Take lure `index` off the floor; a vendor on its way to it goes back to the player. */
+function dropLure(s: Shift, index: number): void {
+  const l = s.lures[index];
+  if (!l) return;
+  for (const v of s.vendors) {
+    const g = v.goal;
+    if (typeof g === 'object' && 'lure' in g && g.lure === l.id) v.goal = 'player';
+  }
+  s.lures.splice(index, 1);
 }
 
 /** Bills land: join a lure of the same shot within lureMerge, or drop a new one. */
@@ -153,6 +164,8 @@ function land(s: Shift, b: Bill, events: ShiftEvent[]): void {
   for (const l of s.lures) {
     if (l.shot === b.shot && Math.hypot(l.x - b.x, l.z - b.z) <= t.lureMerge) return;
   }
+  // At the cap the oldest lure goes, and the vendor on its way to it goes back to the player.
+  if (s.lures.length >= t.maxLures) dropLure(s, 0);
   s.nextLureId += 1;
   s.lures.push({
     id: s.nextLureId,
@@ -227,7 +240,7 @@ function stepLures(s: Shift, dt: number, events: ShiftEvent[]): void {
       if (l.takenBy !== null) continue;
       const d = Math.hypot(l.x - v.x, l.z - v.z);
       if (d > bestD) continue;
-      if (!clearLine(s.nav, v.x, v.z, l.x, l.z, 0.5)) continue;
+      if (!canReach(s, v, l)) continue;
       best = l;
       bestD = d;
     }

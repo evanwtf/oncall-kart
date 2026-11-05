@@ -5,7 +5,7 @@ import { applyStep, issueTicket, type Ticket } from '../../logic/ticket';
 import { breakTimes, shooterSla } from './breaks';
 import { placePickups, stepMoney, type Bill, type Lure, type Pickup } from './money';
 import { FLOOR, solidBoxes, type Box, type FloorDef, type Target } from './floor';
-import { buildNavGrid, flowField, type FlowField, type NavGrid } from './nav';
+import { buildNavGrid, cellAt, flowField, type FlowField, type NavGrid } from './nav';
 import { rollPatches, type Patch } from './patches';
 import { stepPlayer, type MoveInput, type Player } from './player';
 import { SHOOTER_TUNING } from './tuning';
@@ -14,7 +14,6 @@ import {
   slowFactor,
   soundAlarm,
   stepVendors,
-  updatePlayerField,
   vendorArrivals,
   type Vendor,
   type VendorRole,
@@ -94,6 +93,8 @@ export interface Shift {
   /** The field toward the player, rebuilt when the player enters a new cell. */
   playerField: FlowField;
   playerCell: number;
+  /** Builds of playerField so far (Review Focus 5: one per new cell). */
+  playerFieldBuilds: number;
   /** The field toward each alarmed rack, built once per alarm. */
   alarmFields: Map<string, FlowField>;
   /** No vendor line before this time. */
@@ -198,7 +199,8 @@ export function createShift(seed: number, floor: FloorDef = FLOOR): Shift {
     nextVendorId: 0,
     nav,
     playerField: flowField(nav, floor.spawn.x, floor.spawn.z),
-    playerCell: -1,
+    playerCell: cellAt(nav, floor.spawn.x, floor.spawn.z),
+    playerFieldBuilds: 1,
     alarmFields: new Map(),
     nextLineAt: 0,
     vendorNudges: 0,
@@ -213,7 +215,6 @@ export function createShift(seed: number, floor: FloorDef = FLOOR): Shift {
     nextBillId: 0,
     nextLureId: 0,
   };
-  updatePlayerField(s);
   return s;
 }
 

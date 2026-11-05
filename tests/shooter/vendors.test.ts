@@ -19,6 +19,7 @@ import {
   VENDOR_ROLES,
   closeVendors,
   slowFactor,
+  soundAlarm,
   spawnVendor,
   vendorArrivals,
   walkVendor,
@@ -356,14 +357,6 @@ describe('vendor movement', () => {
     // The nudge is a side-step along the wall.
     expect(Math.abs(v.z - 5)).toBeGreaterThan(0.2);
   });
-
-  it('freezes vendors while the shift is not stepped (pause)', () => {
-    const s = quietShift();
-    const v = spawnVendor(s, 'renewal-rep', 20, 18);
-    const before = { x: v.x, z: v.z };
-    // No stepShift call: nothing moves. The loop only steps while playing.
-    expect({ x: v.x, z: v.z }).toEqual(before);
-  });
 });
 
 describe('determinism and phase 1', () => {
@@ -394,5 +387,67 @@ describe('determinism and phase 1', () => {
     const a = play();
     expect(a.length).toBeGreaterThan(0);
     expect(play()).toEqual(a);
+  });
+});
+
+describe('review fixes: vendors', () => {
+  it('frees a lure when an alarm calls its claimant away, and another vendor takes it', () => {
+    const s = quietShift();
+    const rack = s.floor.racks.find((r) => r.x > 20 && r.x < 22 && r.fz === 1 && r.z > 10);
+    if (!rack) throw new Error('setup');
+    // On the corridor: A just inside alarmRange of the rack, B just outside, the lure between.
+    const at = (d: number) => ({ x: rack.x + Math.sqrt(d * d - (18 - rack.z) ** 2), z: 18 });
+    const pa = at(T.alarmRange - 1);
+    const pb = at(T.alarmRange + 1.5);
+    s.nextLureId += 1;
+    const lure = {
+      id: s.nextLureId,
+      shot: -1,
+      x: (pa.x + pb.x) / 2 - 0.3,
+      z: 18,
+      until: s.time + T.lureSeconds,
+      takenBy: null as number | null,
+    };
+    s.lures.push(lure);
+    const a = spawnVendor(s, 'renewal-rep', pa.x, pa.z);
+    const b = spawnVendor(s, 'renewal-rep', pb.x, pb.z);
+    run(s, 1);
+    expect(lure.takenBy).toBe(a.id);
+    soundAlarm(s, rack.id);
+    expect(a.goal).toMatchObject({ alarm: rack.id });
+    expect(b.goal).toBe('player');
+    expect(lure.takenBy).toBeNull();
+    const events = run(s, ticks(3));
+    expect(events.find((e) => e.type === 'lure-taken')).toMatchObject({ vendorId: b.id });
+  });
+
+  it('does not count a vendor through a wall as close, and that vendor walks round', () => {
+    const s = quietShift();
+    s.player.x = 14.5;
+    s.player.z = 10;
+    const v = spawnVendor(s, 'renewal-rep', 13.55, 10);
+    expect(closeVendors(s)).toBe(0);
+    expect(slowFactor(closeVendors(s))).toBe(1);
+    run(s, ticks(1));
+    expect(closeVendors(s)).toBe(0);
+    // It goes round by the corridor and reaches the player's side of the wall.
+    let reached = false;
+    for (let i = 0; i < ticks(15) && !reached; i++) {
+      run(s, 1);
+      reached = v.x > 14.15 && Math.hypot(v.x - s.player.x, v.z - s.player.z) <= T.closeRange;
+    }
+    expect(reached).toBe(true);
+    expect(closeVendors(s)).toBe(1);
+  });
+
+  it('builds the player field once at the start, then only when the player changes cell', () => {
+    const s = quietShift();
+    expect(s.playerFieldBuilds).toBe(1);
+    run(s, ticks(1));
+    expect(s.playerFieldBuilds).toBe(1);
+    // 1 s at 6 m/s crosses about 12 cells of 0.5 m, in 120 steps.
+    run(s, ticks(1), () => ({ move: { forward: 1, strafe: 0 } }));
+    expect(s.playerFieldBuilds).toBeGreaterThan(5);
+    expect(s.playerFieldBuilds).toBeLessThanOrEqual(1 + 16);
   });
 });

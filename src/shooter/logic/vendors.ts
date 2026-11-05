@@ -8,7 +8,7 @@
  */
 import { intBetween, pick, type Rng } from '../../logic/rng';
 import { frontPoint } from './floor';
-import { cellAt, flowDir, flowField, nearestOpen, type FlowField } from './nav';
+import { cellAt, flowDir, flowField, nearestOpen, segmentClear, type FlowField } from './nav';
 import { moveWithCollision } from './player';
 import type { Shift, ShiftEvent } from './shift';
 import { SHOOTER_TUNING } from './tuning';
@@ -155,15 +155,33 @@ export function slowFactor(closeCount: number): number {
 
 export const isDistracted = (s: Shift, v: Vendor): boolean => s.time < v.distractedUntil;
 
-/** Vendors within closeRange of the player that are not distracted. */
+/** Nothing solid (a wall, a rack) stands between the vendor and (x, z). */
+export const inSight = (s: Shift, v: Vendor, x: number, z: number): boolean =>
+  segmentClear(s.boxes, v.x, v.z, x, z, 0);
+
+/**
+ * Close (Evan's rule): within closeRange of the player, not distracted,
+ * and with nothing solid between them. A vendor behind a wall is not close.
+ */
+export function isClose(s: Shift, v: Vendor): boolean {
+  if (isDistracted(s, v)) return false;
+  if (Math.hypot(v.x - s.player.x, v.z - s.player.z) > SHOOTER_TUNING.closeRange) return false;
+  return inSight(s, v, s.player.x, s.player.z);
+}
+
+/** Vendors that are close to the player now. */
 export function closeVendors(s: Shift): number {
-  const r = SHOOTER_TUNING.closeRange;
   let n = 0;
-  for (const v of s.vendors) {
-    if (isDistracted(s, v)) continue;
-    if (Math.hypot(v.x - s.player.x, v.z - s.player.z) <= r) n += 1;
-  }
+  for (const v of s.vendors) if (isClose(s, v)) n += 1;
   return n;
+}
+
+/** A vendor gives up its lure: the lure is free again, and the vendor goes back to the player. */
+export function releaseLure(s: Shift, v: Vendor): void {
+  const g = v.goal;
+  if (typeof g !== 'object' || !('lure' in g)) return;
+  for (const l of s.lures) if (l.id === g.lure && l.takenBy === v.id) l.takenBy = null;
+  v.goal = 'player';
 }
 
 /** Put a vendor on the floor at (x, z), or at the nearest open cell. */
@@ -211,6 +229,7 @@ export function soundAlarm(s: Shift, rackId: string): void {
   s.alarmFields.set(rackId, flowField(s.nav, front.x, front.z, s.alarmFields.get(rackId)));
   for (const v of s.vendors) {
     if (Math.hypot(v.x - rack.x, v.z - rack.z) > t.alarmRange) continue;
+    releaseLure(s, v);
     v.goal = { alarm: rackId, until: s.time + t.alarmSeconds };
   }
 }
@@ -233,6 +252,7 @@ export function updatePlayerField(s: Shift): void {
   if (c === s.playerCell) return;
   s.playerCell = c;
   flowField(s.nav, s.player.x, s.player.z, s.playerField);
+  s.playerFieldBuilds += 1;
 }
 
 /** Move a vendor by (dx, dz) against the walls and racks. */
@@ -245,7 +265,8 @@ function shove(s: Shift, v: Vendor, dx: number, dz: number): void {
 /**
  * Walk a vendor toward the goal point of `field` (or (gx, gz) directly when
  * the field gives no direction), at `speed`, and stop `stop` metres short.
- * Returns true when it walked.
+ * With `sight`, it stops only when nothing solid stands between it and the
+ * goal, so a vendor never parks behind a wall. Returns true when it walked.
  */
 export function walkVendor(
   s: Shift,
@@ -256,10 +277,13 @@ export function walkVendor(
   speed: number,
   dt: number,
   stop: number = SHOOTER_TUNING.vendorStopRange,
+  sight = false,
 ): boolean {
   const t = SHOOTER_TUNING;
   const dist = Math.hypot(gx - v.x, gz - v.z);
-  if (dist <= stop) {
+  // Line of sight is tested only near the goal, where it matters.
+  const seen = !sight || dist > 3 || inSight(s, v, gx, gz);
+  if (dist <= stop && seen) {
     v.stuckFor = 0;
     v.markX = v.x;
     v.markZ = v.z;
@@ -277,19 +301,19 @@ export function walkVendor(
       DIR.z = (gz - v.z) / dist;
     }
   }
-  const step = Math.min(speed * dt, dist - stop);
+  const step = dist > stop ? Math.min(speed * dt, dist - stop) : speed * dt;
   shove(s, v, DIR.x * step, DIR.z * step);
 
   // Stuck: no 0.2 m of progress in 3 s while still far from the goal. A
   // vendor in the crowd round its goal waits there and is not stuck.
-  if (Math.hypot(v.x - v.markX, v.z - v.markZ) >= t.vendorStuckProgress || dist <= 3) {
+  if (Math.hypot(v.x - v.markX, v.z - v.markZ) >= t.vendorStuckProgress || (dist <= 3 && seen)) {
     v.markX = v.x;
     v.markZ = v.z;
     v.stuckFor = 0;
   } else {
     v.stuckFor += dt;
     if (v.stuckFor >= t.vendorStuckSeconds) {
-      // A side-step across the way it was heading; the side alternates.
+      // A side-step across the way it was heading, to a random side.
       const side = s.vendorRng() < 0.5 ? 1 : -1;
       v.nudgeX = -DIR.z * side;
       v.nudgeZ = DIR.x * side;
@@ -374,12 +398,12 @@ export function stepVendors(s: Shift, dt: number, events: ShiftEvent[]): void {
     if (!field) continue;
     const gx = goal === 'player' ? s.player.x : field.goal.x;
     const gz = goal === 'player' ? s.player.z : field.goal.z;
-    v.walking = walkVendor(s, v, field, gx, gz, VENDOR_ROLES[v.role].speed, dt);
+    const speed = VENDOR_ROLES[v.role].speed;
+    v.walking = walkVendor(s, v, field, gx, gz, speed, dt, t.vendorStopRange, true);
   }
   separate(s);
   for (const v of s.vendors) {
-    const close =
-      !isDistracted(s, v) && Math.hypot(v.x - s.player.x, v.z - s.player.z) <= t.closeRange;
+    const close = isClose(s, v);
     if (close && !v.close && s.time >= s.nextLineAt) {
       const lines = VENDOR_ROLES[v.role].lines;
       const line = lines[intBetween(s.vendorRng, 0, lines.length - 1)] ?? '';

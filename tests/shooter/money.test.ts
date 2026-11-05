@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TICKET_TYPES } from '../../src/logic/runbooks';
 import { nextStep } from '../../src/logic/ticket';
 import { FLOOR, frontPoint, solidBoxes } from '../../src/shooter/logic/floor';
-import { PO_SPOTS } from '../../src/shooter/logic/money';
+import { PO_SPOTS, distract } from '../../src/shooter/logic/money';
 import { cellAt } from '../../src/shooter/logic/nav';
 import { NO_MOVE } from '../../src/shooter/logic/player';
 import {
@@ -15,7 +15,7 @@ import {
   type ShiftInput,
 } from '../../src/shooter/logic/shift';
 import { SHOOTER_TUNING } from '../../src/shooter/logic/tuning';
-import { closeVendors, spawnVendor } from '../../src/shooter/logic/vendors';
+import { closeVendors, spawnVendor, type Vendor } from '../../src/shooter/logic/vendors';
 
 const T = SHOOTER_TUNING;
 const DT = 1 / 120;
@@ -326,5 +326,178 @@ describe('pickups', () => {
     expect(before.some((e) => e.type === 'step-ok')).toBe(false);
     const after = run(s, 3, () => ({ work: true }));
     expect(after.some((e) => e.type === 'step-ok')).toBe(true);
+  });
+});
+
+/** A quiet shift, nobody near: the player stays in the break room. */
+function quiet(): Shift {
+  const s = createShift(1);
+  s.arrivals = [];
+  s.nextBreak = s.schedule.length;
+  return s;
+}
+
+/** Put a lure on the floor at (x, z). */
+function dropLure(s: Shift, x: number, z: number) {
+  s.nextLureId += 1;
+  const lure = {
+    id: s.nextLureId,
+    shot: -s.nextLureId,
+    x,
+    z,
+    until: s.time + T.lureSeconds,
+    takenBy: null,
+  };
+  s.lures.push(lure);
+  return lure;
+}
+
+/** Run until `v` takes a lure; true if it did within `seconds`. */
+function takes(s: Shift, v: Vendor, seconds: number): boolean {
+  for (let i = 0; i < ticks(seconds); i++) {
+    if (run(s, 1).some((e) => e.type === 'lure-taken' && e.vendorId === v.id)) return true;
+  }
+  return false;
+}
+
+/** Each rack-face line once per hall: the face z, the way it faces, and a rack in its middle. */
+function faceRows() {
+  const rows = new Map<string, { faceZ: number; fz: number; x: number }>();
+  for (const r of FLOOR.racks) {
+    const faceZ = r.fz < 0 ? r.box.minZ : r.box.maxZ;
+    const hall = r.x < 60 ? 'A' : 'B';
+    const key = `${hall}:${faceZ.toFixed(2)}:${r.fz}`;
+    const seg = FLOOR.racks.filter(
+      (q) =>
+        (q.x < 60 ? 'A' : 'B') === hall &&
+        Math.abs((q.fz < 0 ? q.box.minZ : q.box.maxZ) - faceZ) < 1e-6,
+    );
+    const mid = seg[Math.floor(seg.length / 2) + 3];
+    if (mid && !rows.has(key)) rows.set(key, { faceZ, fz: r.fz, x: mid.x });
+  }
+  return [...rows.values()];
+}
+
+/** Free floor (m) out from a face before the next box, for a vendor's radius. */
+function freeOut(x: number, faceZ: number, fz: number): number {
+  const boxes = solidBoxes(FLOOR);
+  for (let d = 0.35; d < 12; d += 0.05) {
+    const z = faceZ + fz * d;
+    const hit = boxes.some(
+      (b) =>
+        x > b.minX - T.vendorRadius &&
+        x < b.maxX + T.vendorRadius &&
+        z > b.minZ - T.vendorRadius &&
+        z < b.maxZ + T.vendorRadius,
+    );
+    if (hit) return d - 0.05;
+  }
+  return 12;
+}
+
+describe('review fixes: lures', () => {
+  it('lures a vendor 3 m straight out, and one at 45°, on every rack-face row', () => {
+    const rows = faceRows();
+    expect(rows.length).toBe(16);
+    for (const row of rows) {
+      const free = freeOut(row.x, row.faceZ, row.fz);
+      // 3 m out, or as far as the aisle allows.
+      const d = Math.min(3, free - 0.4);
+      const lz = row.faceZ + row.fz * 0.05;
+      const a = quiet();
+      dropLure(a, row.x, lz);
+      const straight = spawnVendor(a, 'renewal-rep', row.x, row.faceZ + row.fz * d);
+      // Claimed on the first step, from where the vendor stands.
+      run(a, 1);
+      expect(a.lures[0]?.takenBy, `straight claim, face ${row.faceZ} ${row.fz}`).toBe(straight.id);
+      expect(takes(a, straight, 4), `straight, face ${row.faceZ} ${row.fz}`).toBe(true);
+      const b = quiet();
+      dropLure(b, row.x, lz);
+      const k = d / Math.SQRT2;
+      const diag = spawnVendor(b, 'renewal-rep', row.x + k, row.faceZ + row.fz * k);
+      run(b, 1);
+      expect(b.lures[0]?.takenBy, `45° claim, face ${row.faceZ} ${row.fz}`).toBe(diag.id);
+      expect(takes(b, diag, 4), `45°, face ${row.faceZ} ${row.fz}`).toBe(true);
+    }
+  });
+
+  it('does not lure a vendor through a rack row', () => {
+    const s = quiet();
+    const rack = segment[3];
+    if (!rack) throw new Error('setup');
+    // Lure on the south face (z = 11), vendor in the aisle north of the row: 3 m, racks between.
+    const lure = dropLure(s, rack.x, 11.05);
+    spawnVendor(s, 'renewal-rep', rack.x, 8.0);
+    run(s, ticks(1));
+    expect(lure.takenBy).toBeNull();
+  });
+
+  it('does not let a distracted vendor claim a lure', () => {
+    const s = quiet();
+    const lure = dropLure(s, 30, 18);
+    const v = spawnVendor(s, 'renewal-rep', 32, 18);
+    v.distractedUntil = 100;
+    run(s, ticks(1));
+    expect(lure.takenBy).toBeNull();
+  });
+
+  it('frees the lure when its claimant is hit, and another vendor takes it', () => {
+    const s = quiet();
+    const lure = dropLure(s, 30, 18);
+    const a = spawnVendor(s, 'renewal-rep', 31.5, 18);
+    const b = spawnVendor(s, 'renewal-rep', 33, 18.5);
+    run(s, 1);
+    expect(lure.takenBy).toBe(a.id);
+    distract(s, a, 5, []);
+    expect(lure.takenBy).toBeNull();
+    expect(a.goal).toBe('player');
+    expect(takes(s, b, 3)).toBe(true);
+  });
+
+  it('keeps at most maxLures on the floor, dropping the oldest', () => {
+    const s = quiet();
+    s.budget = 1e6;
+    // Down the corridor: the bills reach their range and land as separate lures.
+    s.player.x = 20;
+    s.player.z = 18;
+    s.player.yaw = -Math.PI / 2;
+    let most = 0;
+    let lastId = 0;
+    for (let i = 0; i < ticks(12); i++) {
+      for (const e of run(s, 1, fire)) if (e.type === 'lure-dropped') lastId = e.id;
+      most = Math.max(most, s.lures.length);
+    }
+    expect(most).toBeLessThanOrEqual(T.maxLures);
+    expect(s.lures.some((l) => l.id === lastId)).toBe(true);
+  });
+});
+
+describe('review fixes: the toolkit on every kind of work', () => {
+  it('scales hands-on work and patches by toolkitScale', () => {
+    const s = quiet();
+    s.toolkit = true;
+    const type = TICKET_TYPES.find((t) => t.steps.includes('PIT'));
+    const rack = southRow[4];
+    if (!type || !rack) throw new Error('setup');
+    breakRack(s, rack.id, type);
+    const p = frontPoint(rack, 0.8);
+    s.player.x = p.x;
+    s.player.z = p.z;
+    s.player.yaw = yawToward(p.x, p.z, rack.x, rack.z);
+    run(s, 1, () => ({ pick: 'PIT' }));
+    run(s, 2, () => ({ work: true }));
+    expect(s.work?.duration).toBeCloseTo(T.handsOnSeconds * T.toolkitScale, 9);
+
+    const patch = s.patches[0];
+    if (!patch) throw new Error('no patch');
+    const t = s.targets.get(patch.targetId);
+    if (!t) throw new Error('no target');
+    const q = frontPoint(t, 0.8);
+    s.player.x = q.x;
+    s.player.z = q.z;
+    s.player.yaw = yawToward(q.x, q.z, t.x, t.z);
+    run(s, 2, () => ({ work: true }));
+    expect(s.work?.step).toBeNull();
+    expect(s.work?.duration).toBeCloseTo(T.patchSeconds * T.toolkitScale, 9);
   });
 });

@@ -94,6 +94,8 @@ export const SHOOTER_TUNING = {
   lureSeconds: 10,
   /** Bills of one shot that land this close (m) to its lure join it. */
   lureMerge: 1,
+  /** Most lures on the floor; a new one past this drops the oldest. The renderer draws this many. */
+  maxLures: 96,
   /** A free vendor within lureRange (m) of a free lure goes for it. */
   lureRange: 6,
   /** A vendor this close (m) to its lure picks it up. */
