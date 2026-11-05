@@ -241,7 +241,14 @@ function stepLures(s: Shift, dt: number, events: ShiftEvent[]): void {
   for (const v of s.vendors) {
     const g = v.goal;
     if (typeof g !== 'object' || !('lure' in g) || isDistracted(s, v)) continue;
-    const idx = s.lures.findIndex((l) => l.id === g.lure);
+    // A plain loop, not findIndex: no closure per vendor per step.
+    let idx = -1;
+    for (let i = 0; i < s.lures.length; i++) {
+      if (s.lures[i]?.id === g.lure) {
+        idx = i;
+        break;
+      }
+    }
     const l = s.lures[idx];
     if (!l) {
       v.goal = 'player';
