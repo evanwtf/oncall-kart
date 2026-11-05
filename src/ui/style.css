@@ -25,6 +25,14 @@ body {
   height: 100%;
   overflow: hidden;
   background: var(--bg);
+  /* Phones: no page scroll, zoom, text selection or long-press callout. */
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 #game {
@@ -50,6 +58,50 @@ body {
   justify-content: center;
   text-align: center;
   background: rgba(6, 10, 18, 0.55);
+  /* Menus take taps and clicks. The HUD and the countdown do not. */
+  pointer-events: auto;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  box-sizing: border-box;
+}
+
+.screen button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.title {
+  cursor: pointer;
+}
+
+/* Text for one kind of player: the touch layer sets .touch on #ui. */
+#ui.touch .no-touch,
+#ui:not(.touch) .only-touch {
+  display: none;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.action {
+  min-width: 120px;
+  min-height: 48px;
+  padding: 8px 20px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 2px solid var(--dim);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.action.primary {
+  border-color: var(--amber);
+  color: var(--amber);
 }
 
 [hidden] {
@@ -121,6 +173,7 @@ body {
 
 .chip {
   min-width: 56px;
+  min-height: 48px;
   padding: 8px 14px;
   border-radius: 8px;
   background: var(--panel);
@@ -135,9 +188,6 @@ body {
 }
 
 .drivers {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(200px, 1fr));
   gap: 6px 16px;
@@ -147,11 +197,13 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
   padding: 6px 12px;
   border-radius: 8px;
   background: var(--panel);
   border: 2px solid transparent;
   text-align: left;
+  font-size: 16px;
 }
 
 .driver.selected {
@@ -165,11 +217,14 @@ body {
 }
 
 .menu-item {
+  min-width: 220px;
+  min-height: 48px;
   font-size: 24px;
   padding: 6px 24px;
   margin: 4px;
   border-radius: 8px;
   border: 2px solid transparent;
+  background: transparent;
 }
 
 .menu-item.selected {

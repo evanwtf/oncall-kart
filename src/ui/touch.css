@@ -1,0 +1,348 @@
+/* On-screen touch controls, the compact HUD for small screens, and the portrait hint. */
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --btn: 64px;
+  --btn-big: 96px;
+  --gap: 10px;
+}
+
+.touch {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.touch-pad,
+.touch-btn,
+.touch-pause {
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The left half of the screen steers. The ring rests at the bottom left and jumps to the thumb. */
+.touch-pad {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+
+.touch-ring {
+  position: absolute;
+  left: calc(var(--safe-left) + 96px);
+  bottom: calc(var(--safe-bottom) + 24px);
+  width: 140px;
+  height: 140px;
+  margin: -70px 0 0 -70px;
+  border-radius: 50%;
+  border: 2px solid rgba(230, 237, 243, 0.25);
+  background: rgba(10, 16, 26, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.touch-pad:not(.active) .touch-ring {
+  margin: 0 0 0 -70px;
+}
+
+.touch-pad.active .touch-ring {
+  bottom: auto;
+  border-color: rgba(230, 237, 243, 0.5);
+}
+
+.touch-knob {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(230, 237, 243, 0.35);
+  border: 2px solid rgba(230, 237, 243, 0.6);
+}
+
+.touch-pad.active .touch-knob {
+  background: rgba(242, 160, 61, 0.6);
+  border-color: var(--amber);
+}
+
+/* Right thumb: GAS above DRIFT, BRAKE to the left of DRIFT. */
+.touch-buttons {
+  position: absolute;
+  right: calc(var(--safe-right) + 16px);
+  bottom: calc(var(--safe-bottom) + 16px);
+  display: grid;
+  grid-template-columns: var(--btn) var(--btn-big);
+  grid-template-rows: var(--btn) var(--btn-big);
+  grid-template-areas:
+    '. gas'
+    'brake drift';
+  gap: var(--gap);
+  align-items: end;
+  justify-items: center;
+}
+
+.touch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: var(--btn);
+  height: var(--btn);
+  font:
+    800 13px system-ui,
+    -apple-system,
+    sans-serif;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  background: rgba(10, 16, 26, 0.55);
+  border: 2px solid rgba(230, 237, 243, 0.45);
+}
+
+.touch-btn.active {
+  background: rgba(242, 160, 61, 0.55);
+  border-color: var(--amber);
+}
+
+.touch-drift {
+  grid-area: drift;
+  width: var(--btn-big);
+  height: var(--btn-big);
+  font-size: 16px;
+  border-color: rgba(242, 160, 61, 0.7);
+}
+
+.touch-brake {
+  grid-area: brake;
+}
+
+.touch-gas {
+  grid-area: gas;
+  border-color: rgba(61, 220, 151, 0.7);
+}
+
+.touch-pause {
+  position: absolute;
+  top: calc(var(--safe-top) + 12px);
+  right: calc(var(--safe-right) + 12px);
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font:
+    900 18px system-ui,
+    -apple-system,
+    sans-serif;
+  color: var(--ink);
+  background: var(--panel);
+}
+
+/* The HUD makes room for the controls and the safe areas. */
+#ui.touch .hud-left {
+  top: calc(var(--safe-top) + 12px);
+  left: calc(var(--safe-left) + 12px);
+}
+
+#ui.touch .ticket {
+  top: calc(var(--safe-top) + 12px);
+  right: calc(var(--safe-right) + 72px);
+}
+
+#ui.touch .hud-speed {
+  right: auto;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 12px);
+  transform: translateX(-50%);
+}
+
+/* Small screens: a phone in either orientation. */
+@media (max-height: 500px), (max-width: 700px) {
+  .hud-left {
+    padding: 6px 10px;
+  }
+
+  .hud-lap {
+    font-size: 20px;
+  }
+
+  .hud-time {
+    font-size: 15px;
+  }
+
+  .hud-best {
+    font-size: 11px;
+  }
+
+  .hud-speed {
+    font-size: 18px;
+    padding: 4px 10px;
+  }
+
+  .ticket {
+    width: 240px;
+    padding: 8px 10px;
+  }
+
+  .ticket-head {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  /* Steps on one line, wrapped. */
+  .ticket-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .step {
+    gap: 3px;
+  }
+
+  .step.next {
+    font-size: 14px;
+  }
+
+  .step .work {
+    font-size: 11px;
+  }
+
+  .toasts {
+    top: 30%;
+  }
+
+  .toast {
+    font-size: 20px;
+  }
+
+  .toast.small {
+    font-size: 14px;
+  }
+
+  .countdown {
+    font-size: 80px;
+  }
+
+  .screen h1.logo {
+    font-size: 48px;
+  }
+
+  .screen h2 {
+    font-size: 26px;
+    margin-bottom: 4px;
+  }
+
+  .tagline {
+    font-size: 18px;
+    margin: 4px 0 16px;
+  }
+
+  .label {
+    margin: 6px 0 4px;
+  }
+
+  .actions {
+    margin-top: 10px;
+  }
+
+  .report {
+    font-size: 16px;
+    gap: 2px 20px;
+    margin-bottom: 6px;
+  }
+
+  .caption {
+    font-size: 16px;
+  }
+}
+
+/* A short landscape phone: drivers in four columns, so setup fits. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .drivers {
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    gap: 6px;
+  }
+
+  .driver {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+
+  .menu-item {
+    min-height: 44px;
+    font-size: 20px;
+    margin: 2px;
+  }
+}
+
+/* Portrait phone: the ticket card goes under the lap counter. */
+@media (orientation: portrait) and (max-width: 700px) {
+  .drivers {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  #ui .ticket {
+    top: calc(var(--safe-top) + 84px);
+    left: calc(var(--safe-left) + 12px);
+    right: calc(var(--safe-right) + 12px);
+    width: auto;
+  }
+
+  #ui.touch .hud-speed {
+    left: auto;
+    transform: none;
+    right: calc(var(--safe-right) + 16px);
+    bottom: calc(var(--safe-bottom) + 16px + var(--btn) + var(--gap) + var(--btn-big) + 10px);
+  }
+}
+
+.rotate-hint {
+  display: none;
+}
+
+/* On the track only: in a menu it would cover the buttons. */
+@media (orientation: portrait) {
+  #ui.touch[data-screen='countdown'] .rotate-hint:not([hidden]),
+  #ui.touch[data-screen='racing'] .rotate-hint:not([hidden]) {
+    position: absolute;
+    left: 50%;
+    top: 45%;
+    transform: translate(-50%, -50%);
+    width: min(300px, calc(100% - 32px));
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 10px;
+    background: var(--panel);
+    border: 2px solid var(--amber);
+    font-size: 16px;
+    font-weight: 700;
+    pointer-events: auto;
+    z-index: 2;
+    box-sizing: border-box;
+  }
+}
+
+.rotate-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+  font-size: 18px;
+  cursor: pointer;
+}

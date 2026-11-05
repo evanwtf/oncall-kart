@@ -1,6 +1,7 @@
 import { startGame } from './game';
 import { showNoWebGl } from './ui/screens';
 import './ui/style.css';
+import './ui/touch.css';
 
 function hasWebGl2(): boolean {
   try {

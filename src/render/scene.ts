@@ -30,15 +30,25 @@ interface Pose {
   heading: number;
 }
 
-export function createScene(canvas: HTMLCanvasElement, initial: Race): SceneHandle {
+export interface SceneOptions {
+  /** Phones and tablets: pixel ratio capped at 1.5 and no shadows. */
+  lowPower?: boolean;
+}
+
+export function createScene(
+  canvas: HTMLCanvasElement,
+  initial: Race,
+  options: SceneOptions = {},
+): SceneHandle {
+  const lowPower = options.lowPower ?? false;
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !lowPower;
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
@@ -48,7 +58,7 @@ export function createScene(canvas: HTMLCanvasElement, initial: Race): SceneHand
   // Cold-aisle light: blue from above, dark floor bounce, one cool key light.
   scene.add(new THREE.HemisphereLight(0xa8c8ff, 0x3a4658, 3.4));
   const key = new THREE.DirectionalLight(0xffffff, 2.8);
-  key.castShadow = true;
+  key.castShadow = !lowPower;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.left = -20;
   key.shadow.camera.right = 20;

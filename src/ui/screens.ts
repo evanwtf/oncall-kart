@@ -1,3 +1,4 @@
+import type { Action } from '../input';
 import { DRIVERS } from '../logic/drivers';
 import type { Race, RaceEvent } from '../logic/race';
 import { createHud, formatTime } from './hud';
@@ -14,6 +15,17 @@ export interface UiState {
   setup: SetupState;
   pauseIndex: number;
   race: Race | null;
+  /** The touch controls are on: show tap prompts and the touch-only pause items. */
+  touch: boolean;
+  autoGas: boolean;
+}
+
+/** What a tap or a click on a menu asks the game to do. */
+export interface UiHandlers {
+  action(a: Action): void;
+  selectLap(i: number): void;
+  selectDriver(i: number): void;
+  selectPause(i: number): void;
 }
 
 export interface Ui {
@@ -23,7 +35,24 @@ export interface Ui {
 }
 
 export const LAP_LABELS = ['1', '3', '10'] as const;
-export const PAUSE_LABELS = ['Resume', 'Restart', 'Quit to setup'] as const;
+export type PauseItem = 'Resume' | 'Restart' | 'Respawn' | 'Auto-gas' | 'Quit to setup';
+const ALL_PAUSE_ITEMS: readonly PauseItem[] = [
+  'Resume',
+  'Restart',
+  'Respawn',
+  'Auto-gas',
+  'Quit to setup',
+];
+/** Touch has no R key and needs the auto-gas switch: those items are touch-only. */
+const TOUCH_ONLY: ReadonlySet<PauseItem> = new Set(['Respawn', 'Auto-gas']);
+
+/** The pause menu, in order. */
+export function pauseItems(touch: boolean): PauseItem[] {
+  return ALL_PAUSE_ITEMS.filter((i) => touch || !TOUCH_ONLY.has(i));
+}
+
+const pauseText = (item: PauseItem, autoGas: boolean) =>
+  item === 'Auto-gas' ? `Auto-gas: ${autoGas ? 'On' : 'Off'}` : item;
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -55,34 +84,62 @@ export function shiftCaption(s: {
   return 'Solid shift. Hand over and log off.';
 }
 
-export function createUi(root: HTMLElement): Ui {
+/** A click or a tap runs fn. The button gives up focus, so Enter and Space stay with the keyboard handler. */
+function onTap(e: HTMLElement, fn: () => void): void {
+  e.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    e.blur();
+    fn();
+  });
+}
+
+function button(cls: string, text: string | undefined, parent: HTMLElement): HTMLButtonElement {
+  const b = el('button', cls, text, parent);
+  b.type = 'button';
+  return b;
+}
+
+export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   const panels = el('div', 'screens', undefined, root);
+  let current: UiState | null = null;
 
   // Title.
   const title = el('div', 'screen title', undefined, panels);
   el('h1', 'logo', 'oncall-kart', title);
   el('p', 'tagline', 'The race is the queue.', title);
-  el('p', 'prompt', 'Press Enter', title);
+  el('p', 'prompt no-touch', 'Press Enter', title);
+  el('p', 'prompt only-touch', 'Tap to start', title);
   el('p', 'hint', 'Close tickets: drive through the gates in runbook order.', title);
-  el('p', 'hint', '↑ drive · ← → steer · Space drift · R respawn · P pause', title);
+  el('p', 'hint no-touch', '↑ drive · ← → steer · Space drift · R respawn · P pause', title);
+  el('p', 'hint only-touch', 'Left thumb steers · DRIFT and BRAKE on the right', title);
   el('p', 'version', `v${__APP_VERSION__}`, title);
+  onTap(title, () => handlers.action('confirm'));
 
   // Setup.
   const setup = el('div', 'screen setup', undefined, panels);
   el('h2', '', 'Shift setup', setup);
-  el('div', 'label', 'Laps  ← →', setup);
+  el('div', 'label', 'Laps', setup);
   const lapRow = el('div', 'laps', undefined, setup);
-  const lapEls = LAP_LABELS.map((l) => el('span', 'chip', l, lapRow));
-  el('div', 'label', 'On call  ↑ ↓', setup);
-  const driverList = el('ul', 'drivers', undefined, setup);
-  const driverEls = DRIVERS.map((d) => {
-    const li = el('li', 'driver', undefined, driverList);
-    const sw = el('span', 'swatch', undefined, li);
-    sw.style.background = hex(d.color);
-    el('span', 'name', d.name, li);
-    return li;
+  const lapEls = LAP_LABELS.map((l, i) => {
+    const b = button('chip', l, lapRow);
+    onTap(b, () => handlers.selectLap(i));
+    return b;
   });
-  el('p', 'hint', 'Enter to start · Esc to go back', setup);
+  el('div', 'label', 'On call', setup);
+  const driverList = el('div', 'drivers', undefined, setup);
+  const driverEls = DRIVERS.map((d, i) => {
+    const b = button('driver', undefined, driverList);
+    const sw = el('span', 'swatch', undefined, b);
+    sw.style.background = hex(d.color);
+    el('span', 'name', d.name, b);
+    onTap(b, () => handlers.selectDriver(i));
+    return b;
+  });
+  const setupActions = el('div', 'actions', undefined, setup);
+  onTap(button('action', 'Back', setupActions), () => handlers.action('back'));
+  onTap(button('action primary', 'Start', setupActions), () => handlers.action('confirm'));
+  el('p', 'hint no-touch', '← → laps · ↑ ↓ driver · Enter to start · Esc to go back', setup);
 
   // Countdown.
   const countdown = el('div', 'countdown', undefined, panels);
@@ -90,8 +147,21 @@ export function createUi(root: HTMLElement): Ui {
   // Pause.
   const pause = el('div', 'screen pause', undefined, panels);
   el('h2', '', 'Paused', pause);
-  const pauseEls = PAUSE_LABELS.map((l) => el('div', 'menu-item', l, pause));
-  el('p', 'hint', '↑ ↓ and Enter · P or Esc resumes', pause);
+  const pauseEls = new Map<PauseItem, HTMLButtonElement>(
+    ALL_PAUSE_ITEMS.map((item) => {
+      const b = button('menu-item', item, pause);
+      onTap(b, () => {
+        const items = pauseItems(current?.touch ?? false);
+        const i = items.indexOf(item);
+        if (i < 0 || !current) return;
+        // Tap an item to select it; tap the selected item to confirm it.
+        if (i === current.pauseIndex) handlers.action('confirm');
+        else handlers.selectPause(i);
+      });
+      return [item, b] as const;
+    }),
+  );
+  el('p', 'hint no-touch', '↑ ↓ and Enter · P or Esc resumes', pause);
 
   // Results.
   const results = el('div', 'screen results', undefined, panels);
@@ -109,7 +179,19 @@ export function createUi(root: HTMLElement): Ui {
     breaches: row('SLA breaches'),
   };
   const caption = el('p', 'caption', '', results);
-  el('p', 'hint', 'Enter to race again · Esc for setup', results);
+  const resultActions = el('div', 'actions', undefined, results);
+  onTap(button('action', 'Setup', resultActions), () => handlers.action('back'));
+  onTap(button('action primary', 'Race again', resultActions), () => handlers.action('confirm'));
+  el('p', 'hint no-touch', 'Enter to race again · Esc for setup', results);
+
+  // Portrait hint, for touch only (CSS shows it in portrait). Dismissed for the page.
+  const rotate = el('div', 'rotate-hint', undefined, root);
+  el('span', '', 'Turn your phone sideways for the best view', rotate);
+  const rotateClose = button('rotate-close', '✕', rotate);
+  rotateClose.setAttribute('aria-label', 'Dismiss');
+  onTap(rotateClose, () => {
+    rotate.hidden = true;
+  });
 
   const hud = createHud(root);
   let lastScreen: Screen | null = null;
@@ -126,6 +208,8 @@ export function createUi(root: HTMLElement): Ui {
 
   return {
     render(state) {
+      current = state;
+      root.classList.toggle('touch', state.touch);
       if (state.screen !== lastScreen) {
         show(state.screen);
         lastScreen = state.screen;
@@ -142,7 +226,14 @@ export function createUi(root: HTMLElement): Ui {
         driverEls.forEach((e, i) => e.classList.toggle('selected', i === state.setup.colorIndex));
       }
       if (state.screen === 'paused') {
-        pauseEls.forEach((e, i) => e.classList.toggle('selected', i === state.pauseIndex));
+        const items = pauseItems(state.touch);
+        for (const [item, e] of pauseEls) {
+          const i = items.indexOf(item);
+          e.hidden = i < 0;
+          e.classList.toggle('selected', i === state.pauseIndex);
+          const text = pauseText(item, state.autoGas);
+          if (e.textContent !== text) e.textContent = text;
+        }
       }
       if (race && !hud.el.hidden) hud.update(race);
 
@@ -174,6 +265,7 @@ export function createUi(root: HTMLElement): Ui {
     dispose() {
       panels.remove();
       hud.el.remove();
+      rotate.remove();
     },
   };
 }

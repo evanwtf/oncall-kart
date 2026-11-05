@@ -1,4 +1,4 @@
-import { createKeyboard, type Action } from './input';
+import { createInput, createKeyboard, type Action } from './input';
 import { NO_INPUT, spawnKart } from './logic/kart';
 import {
   createRace,
@@ -14,7 +14,8 @@ import { HALL } from './logic/tracks/hall';
 import { TUNING } from './logic/tuning';
 import { DRIVERS } from './logic/drivers';
 import { createScene } from './render/scene';
-import { createUi, PAUSE_LABELS as PAUSE_ITEMS, type Screen, type UiState } from './ui/screens';
+import { createTouch, loadAutoGas, saveAutoGas } from './touchInput';
+import { createUi, pauseItems, type Screen, type UiState } from './ui/screens';
 
 export const LAP_CHOICES: readonly LapCount[] = [1, 3, 10];
 /**
@@ -31,6 +32,10 @@ export interface DebugHooks {
   phase(): string | null;
   screen(): Screen;
   playerSpeed(): number;
+  /** Player heading in radians. */
+  playerHeading(): number;
+  /** The on-screen touch controls are showing. */
+  touchControls(): boolean;
   playerLap(): number;
   playerTicket(): { number: number; title: string; next: string | null } | null;
   /** Race clock in seconds. */
@@ -61,17 +66,32 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   const fixedSeed = seedFromUrl();
   const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 2 ** 31);
   const keyboard = createKeyboard(window);
-  const ui = createUi(uiRoot);
+  const touch = createTouch(uiRoot);
+  const input = createInput([keyboard, touch]);
+  // A phone or a tablet: lighter rendering, touch controls from the start.
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
 
   const state: UiState = {
     screen: 'title',
     setup: { lapIndex: 0, colorIndex: 0 },
     pauseIndex: 0,
     race: null,
+    touch: coarse,
+    autoGas: loadAutoGas(),
   };
+  touch.setAutoGas(state.autoGas);
+  // A touchscreen laptop reports a fine pointer: the first touch turns the controls on.
+  const onPointerDown = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') state.touch = true;
+  };
+  window.addEventListener('pointerdown', onPointerDown, true);
+  // iOS: no pinch zoom, no double-tap zoom, no page scroll during play.
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+  document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
   // The title and setup screens show the hall behind them: a race that never starts.
   let race: Race = createRace({ laps: 1, seed: newSeed(), driverColor: 0 }, track);
-  const scene = createScene(canvas, race);
+  const scene = createScene(canvas, race, { lowPower: coarse });
   let acc = 0;
   let finishTimer = 0;
   let last = performance.now();
@@ -101,6 +121,10 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     state.race = null;
   };
 
+  const resume = () => {
+    state.screen = pausedFrom;
+  };
+
   const handle = (a: Action) => {
     switch (state.screen) {
       case 'title':
@@ -128,25 +152,48 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           ui.onEvents(respawn(race, race.playerId), race);
         }
         break;
-      case 'paused':
-        if (a === 'pause') state.screen = pausedFrom;
-        if (a === 'up')
-          state.pauseIndex = (state.pauseIndex + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length;
-        if (a === 'down') state.pauseIndex = (state.pauseIndex + 1) % PAUSE_ITEMS.length;
-        if (a === 'back') state.screen = pausedFrom;
+      case 'paused': {
+        const items = pauseItems(state.touch);
+        if (a === 'pause' || a === 'back') resume();
+        if (a === 'up') state.pauseIndex = (state.pauseIndex + items.length - 1) % items.length;
+        if (a === 'down') state.pauseIndex = (state.pauseIndex + 1) % items.length;
         if (a === 'confirm') {
-          const item = PAUSE_ITEMS[state.pauseIndex];
-          if (item === 'Resume') state.screen = pausedFrom;
+          const item = items[state.pauseIndex];
+          if (item === 'Resume') resume();
           if (item === 'Restart') startRace();
+          if (item === 'Respawn') {
+            // A respawn in the countdown would do nothing: it only resumes.
+            if (pausedFrom === 'racing') ui.onEvents(respawn(race, race.playerId), race);
+            resume();
+          }
+          if (item === 'Auto-gas') {
+            state.autoGas = !state.autoGas;
+            touch.setAutoGas(state.autoGas);
+            saveAutoGas(state.autoGas);
+          }
           if (item === 'Quit to setup') toSetup();
         }
         break;
+      }
       case 'results':
         if (a === 'confirm') startRace();
         if (a === 'pause' || a === 'back') toSetup();
         break;
     }
   };
+
+  const ui = createUi(uiRoot, {
+    action: handle,
+    selectLap: (i) => {
+      if (state.screen === 'setup') state.setup.lapIndex = i;
+    },
+    selectDriver: (i) => {
+      if (state.screen === 'setup') state.setup.colorIndex = i;
+    },
+    selectPause: (i) => {
+      if (state.screen === 'paused') state.pauseIndex = i;
+    },
+  });
 
   const onEvents = (events: RaceEvent[]) => {
     if (events.length === 0) return;
@@ -175,14 +222,16 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     const dt = Math.min(MAX_CATCH_UP, Math.max(0, (now - last) / 1000));
     last = now;
 
-    for (const a of keyboard.takeActions()) handle(a);
+    // The touch layer shows on the track only; the menus take taps themselves.
+    touch.setVisible(state.touch && (state.screen === 'countdown' || state.screen === 'racing'));
+    for (const a of input.takeActions()) handle(a);
 
     if (state.screen === 'countdown' || state.screen === 'racing') {
       acc += dt;
-      const input = state.screen === 'racing' ? keyboard.read() : NO_INPUT;
+      const kartInput = state.screen === 'racing' ? input.read() : NO_INPUT;
       while (acc >= TUNING.step) {
         scene.capture(race);
-        onEvents(stepRace(race, [input], TUNING.step));
+        onEvents(stepRace(race, [kartInput], TUNING.step));
         acc -= TUNING.step;
       }
       if (race.phase === 'finished') {
@@ -203,6 +252,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     phase: () => (state.race ? race.phase : null),
     screen: () => state.screen,
     playerSpeed: () => player()?.kart.speed ?? 0,
+    playerHeading: () => player()?.kart.heading ?? 0,
+    touchControls: () => !touch.el.hidden,
     playerLap: () => player()?.lap.completed ?? 0,
     playerTicket: () => {
       const t = player()?.ticket;
