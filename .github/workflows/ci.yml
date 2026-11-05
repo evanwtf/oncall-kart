@@ -16,6 +16,11 @@ jobs:
     steps:
       # Shared runner: scope the npm cache to this run.
       - run: echo "npm_config_cache=$RUNNER_TEMP/npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      # The e2e job runs as root in a container and shares this workspace on
+      # the runner. Take back any files it left, .git included, before
+      # checkout, or checkout fails with "insufficient permission".
+      - name: Reclaim the workspace from root
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/w" mcr.microsoft.com/playwright:v1.64.1-noble chown -R "$(id -u):$(id -g)" /w
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -54,11 +59,15 @@ jobs:
           path: playwright-report/
           if-no-files-found: ignore
           retention-days: 1
-      # Root wrote these files into the runner's workspace. Remove them here,
-      # so the next checkout by the runner user can clean the directory.
-      - name: Remove root-owned build output
+      # Root wrote these files into the runner's workspace. Remove the build
+      # output, then give everything left, .git included, back to the owner
+      # of the parent directory (the runner user), so the next job's checkout
+      # can write to it.
+      - name: Return the workspace to the runner user
         if: always()
-        run: rm -rf node_modules dist playwright-report test-results
+        run: |
+          rm -rf node_modules dist playwright-report test-results
+          chown -R "$(stat -c '%u:%g' "$GITHUB_WORKSPACE/..")" "$GITHUB_WORKSPACE"
 
   deploy:
     needs: [check, e2e]
@@ -77,6 +86,11 @@ jobs:
       cancel-in-progress: false
     steps:
       - run: echo "npm_config_cache=$RUNNER_TEMP/npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      # The e2e job runs as root in a container and shares this workspace on
+      # the runner. Take back any files it left, .git included, before
+      # checkout, or checkout fails with "insufficient permission".
+      - name: Reclaim the workspace from root
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/w" mcr.microsoft.com/playwright:v1.64.1-noble chown -R "$(id -u):$(id -g)" /w
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
