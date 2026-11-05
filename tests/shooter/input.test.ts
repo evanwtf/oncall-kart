@@ -1,0 +1,168 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createShooterInput, type ShooterInput } from '../../src/shooter/input';
+import { SHOOTER_TUNING } from '../../src/shooter/logic/tuning';
+
+let input: ShooterInput | null = null;
+let canvas: HTMLCanvasElement;
+let lockEl: Element | null = null;
+
+const down = (code: string, repeat = false) =>
+  window.dispatchEvent(new KeyboardEvent('keydown', { code, repeat, bubbles: true }));
+const up = (code: string) =>
+  window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+const mouse = (movementX: number, movementY: number) => {
+  const e = new MouseEvent('mousemove', { bubbles: true });
+  Object.defineProperty(e, 'movementX', { value: movementX });
+  Object.defineProperty(e, 'movementY', { value: movementY });
+  document.dispatchEvent(e);
+};
+const setLock = (el: Element | null) => {
+  lockEl = el;
+  document.dispatchEvent(new Event('pointerlockchange'));
+};
+
+beforeEach(() => {
+  canvas = document.createElement('canvas');
+  document.body.appendChild(canvas);
+  lockEl = null;
+  Object.defineProperty(document, 'pointerLockElement', {
+    configurable: true,
+    get: () => lockEl,
+  });
+});
+
+afterEach(() => {
+  input?.dispose();
+  input = null;
+  canvas.remove();
+  vi.restoreAllMocks();
+});
+
+describe('shooter input', () => {
+  it('maps W A S D and the arrows to movement', () => {
+    input = createShooterInput(window, canvas);
+    down('KeyW');
+    expect(input.read().move).toEqual({ forward: 1, strafe: 0 });
+    down('KeyD');
+    expect(input.read().move).toEqual({ forward: 1, strafe: 1 });
+    up('KeyW');
+    up('KeyD');
+    down('ArrowDown');
+    down('ArrowLeft');
+    expect(input.read().move).toEqual({ forward: -1, strafe: -1 });
+    up('ArrowDown');
+    up('ArrowLeft');
+    expect(input.read().move).toEqual({ forward: 0, strafe: 0 });
+  });
+
+  it('holds E to work', () => {
+    input = createShooterInput(window, canvas);
+    down('KeyE');
+    expect(input.read().work).toBe(true);
+    up('KeyE');
+    expect(input.read().work).toBe(false);
+  });
+
+  it('picks the panel step with the number keys, once per press', () => {
+    input = createShooterInput(window, canvas);
+    down('Digit5');
+    expect(input.read().pick).toBe('FW-ISO');
+    expect(input.read().pick).toBeNull();
+    down('Numpad9');
+    expect(input.read().pick).toBe('PIT');
+    down('Digit1');
+    expect(input.read().pick).toBe('MAINT');
+  });
+
+  it('queues pause for P and Esc', () => {
+    input = createShooterInput(window, canvas);
+    down('KeyP');
+    down('Escape');
+    expect(input.takeActions()).toEqual(['pause', 'pause']);
+    expect(input.takeActions()).toEqual([]);
+  });
+
+  it('turns with the mouse only while locked, and clamps the pitch', () => {
+    input = createShooterInput(window, canvas);
+    input.setView(0, 0);
+    mouse(100, 0);
+    expect(input.read().yaw).toBe(0);
+    setLock(canvas);
+    mouse(100, 0);
+    // Mouse right turns right: yaw goes down.
+    expect(input.read().yaw).toBeCloseTo(-100 * SHOOTER_TUNING.mouseSensitivity);
+    mouse(0, -100000);
+    expect(input.read().pitch).toBeCloseTo((SHOOTER_TUNING.pitchLimitDeg * Math.PI) / 180);
+    mouse(0, 100000);
+    expect(input.read().pitch).toBeCloseTo((-SHOOTER_TUNING.pitchLimitDeg * Math.PI) / 180);
+  });
+
+  it('uses the sensitivity it is given', () => {
+    input = createShooterInput(window, canvas);
+    input.setView(0, 0);
+    input.setSensitivity(0.01);
+    setLock(canvas);
+    mouse(10, 0);
+    expect(input.read().yaw).toBeCloseTo(-0.1);
+  });
+
+  it('releases every key on blur', () => {
+    input = createShooterInput(window, canvas);
+    down('KeyW');
+    down('KeyE');
+    window.dispatchEvent(new Event('blur'));
+    const r = input.read();
+    expect(r.move).toEqual({ forward: 0, strafe: 0 });
+    expect(r.work).toBe(false);
+  });
+
+  it('queues one pause when the lock is lost, even with the Esc that caused it', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    expect(input.locked()).toBe(true);
+    setLock(null);
+    down('Escape');
+    expect(input.locked()).toBe(false);
+    expect(input.takeActions()).toEqual(['pause']);
+  });
+
+  it('releases every key when the lock is lost', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    down('KeyE');
+    setLock(null);
+    expect(input.read().work).toBe(false);
+  });
+
+  it('catches a refused lock that throws, without logging', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    canvas.requestPointerLock = () => {
+      throw new Error('refused');
+    };
+    input = createShooterInput(window, canvas);
+    expect(() => input?.requestLock()).not.toThrow();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('catches a refused lock that rejects, without logging', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    canvas.requestPointerLock = () => Promise.reject(new Error('refused'));
+    input = createShooterInput(window, canvas);
+    input.requestLock();
+    await new Promise((r) => setTimeout(r, 10));
+    process.off('unhandledRejection', unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('queues menu actions for Enter and the arrows', () => {
+    input = createShooterInput(window, canvas);
+    down('Enter');
+    down('ArrowUp');
+    down('ArrowDown', true);
+    expect(input.takeActions()).toEqual(['confirm', 'up']);
+  });
+});

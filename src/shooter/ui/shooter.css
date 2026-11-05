@@ -1,0 +1,404 @@
+/* Zero Down: the shooter's HUD and screens. Every class starts with zd-. */
+
+.zd-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.zd-clock {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.zd-clock.low {
+  color: var(--red);
+}
+
+.zd-tickets {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow: hidden;
+}
+
+.zd-ticket {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  border-left: 4px solid var(--red);
+}
+
+.zd-ticket.breached {
+  box-shadow: 0 0 0 2px var(--red);
+}
+
+.zd-ticket-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.zd-ticket-loc {
+  color: var(--amber);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.zd-ticket-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.zd-step {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.zd-step.done {
+  color: var(--step-done);
+  text-decoration: line-through;
+}
+
+.zd-step.pending {
+  color: var(--step-pending);
+}
+
+.zd-step.next {
+  color: #0d1117;
+}
+
+.zd-step.next .zd-op {
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.zd-sla {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.zd-sla-fill {
+  height: 100%;
+  background: var(--green);
+  transform-origin: left center;
+}
+
+.zd-sla.low .zd-sla-fill {
+  background: var(--red);
+}
+
+.zd-patches {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 270px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  border-left: 4px solid #4d9de0;
+  font-size: 13px;
+}
+
+.zd-patches-head {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7fd1ff;
+  margin-bottom: 4px;
+}
+
+.zd-patch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zd-patch {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.zd-patch.applied {
+  color: var(--step-done);
+}
+
+.zd-patch.applied .zd-check {
+  color: var(--green);
+}
+
+.zd-patch-name {
+  flex: 1;
+  font-weight: 700;
+}
+
+.zd-patch-target,
+.zd-patch-id {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--dim);
+}
+
+.zd-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  background:
+    linear-gradient(var(--ink), var(--ink)) center / 2px 100% no-repeat,
+    linear-gradient(var(--ink), var(--ink)) center / 100% 2px no-repeat;
+  opacity: 0.75;
+}
+
+.zd-map {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(127, 209, 255, 0.4);
+}
+
+.zd-toasts {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.zd-toast {
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.zd-toast.good {
+  color: var(--green);
+}
+
+.zd-toast.bad {
+  color: var(--red);
+}
+
+.zd-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(460px, 90vw);
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 2px solid var(--amber);
+}
+
+.zd-panel-head {
+  font-weight: 800;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.zd-panel-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.zd-panel-step {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.zd-panel-step:last-child {
+  grid-column: 1 / -1;
+}
+
+.zd-panel-step.selected {
+  border-color: var(--step-color);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.zd-key {
+  display: inline-block;
+  min-width: 1.3em;
+  text-align: center;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.zd-panel-patch {
+  font-size: 15px;
+  margin-bottom: 8px;
+  color: #7fd1ff;
+}
+
+.zd-panel-hint {
+  font-size: 13px;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+
+.zd-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.zd-bar-fill {
+  height: 100%;
+  background: var(--amber);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.zd-lock-hint {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 14px;
+}
+
+.zd-briefing {
+  cursor: pointer;
+  background: rgba(6, 10, 18, 0.78);
+}
+
+.screen h1.zd-logo {
+  color: #7fd1ff;
+}
+
+.zd-brief-cols {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  text-align: left;
+  margin: 0 16px;
+}
+
+.zd-brief-col {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  min-width: 280px;
+}
+
+.screen .zd-brief-col h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.zd-brief-patches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zd-brief-patch {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 4px 0;
+}
+
+.zd-controls th {
+  text-align: left;
+  padding-right: 16px;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.zd-sens {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.zd-sens-btn {
+  min-width: 36px;
+  min-height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--dim);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.screen h1.zd-end-title[data-ending='clean'] {
+  color: var(--green);
+}
+
+.screen h1.zd-end-title[data-ending='rough'] {
+  color: var(--amber);
+}
+
+.screen h1.zd-end-title[data-ending='fired'] {
+  color: var(--red);
+}
+
+.zd-end-patches {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  font-size: 15px;
+}
+
+.zd-end-patches .applied {
+  color: var(--green);
+}
+
+.zd-end-patches .missed {
+  color: var(--red);
+}
+
+.zd .action.selected {
+  outline: 3px solid var(--ink);
+}
