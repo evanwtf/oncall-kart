@@ -19,7 +19,7 @@ describe('ci.yml', () => {
 
   it('checks the e2e image Node against .nvmrc before it builds', () => {
     const e2e = workflow.slice(workflow.indexOf('\n  e2e:'), workflow.indexOf('\n  deploy:'));
-    const guard = e2e.indexOf('node scripts/check-node.mjs');
+    const guard = e2e.search(/^\s*- run: node scripts\/check-node\.mjs$/m);
     expect(guard).toBeGreaterThan(0);
     expect(guard).toBeLessThan(e2e.indexOf('npm ci'));
   });
