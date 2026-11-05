@@ -2,7 +2,7 @@
 // CI guard. The e2e job runs in the Playwright image, which brings its own
 // Node. Refuse to build when that Node's major version differs from .nvmrc.
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 /**
  * Compare a Node version with the .nvmrc text.
@@ -29,4 +29,4 @@ function main() {
   console.log(`check-node: Node ${process.versions.node} matches .nvmrc.`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (isMain(import.meta.url)) main();

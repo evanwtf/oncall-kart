@@ -6,7 +6,7 @@
 // per line; that file is git-ignored. PUBLIC_DENYLIST overrides its path.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 /** @type {ReadonlyArray<readonly [string, RegExp]>} */
 const RULES = [
@@ -92,4 +92,4 @@ function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (isMain(import.meta.url)) main();
