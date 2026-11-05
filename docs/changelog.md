@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.0
+
+Phase 2: seven bot rivals, items and hazards.
+
+- Every race has 8 karts: you and 7 bots. Each bot holds its own ticket,
+  steers for the gate of its next step, takes the pit when it needs it, and
+  makes mistakes by its skill. The strongest bot laps the hall in about
+  40 s, so a good run beats it. Bots rubber-band a little to keep the pack
+  close.
+- Karts bump each other. The grid holds all 8, after the line, and you
+  start at the back.
+- The HUD shows your place (it pops when it changes), the item you hold, and
+  a minimap with a dot per kart. Each rival has a name tag that fades with
+  distance. On a short phone screen the minimap hides, so the gate signs
+  stay in view.
+- Item boxes are change-request crates in three rows. A closed ticket also
+  gives an item. Coffee boosts you. Rollback cancels your next penalty.
+  Firewall blocks one hit for 5 s. Page homes on the kart ahead and spins
+  it. Spill drops a puddle behind you. Trailing karts roll more Coffee and
+  Pages; leaders more Firewalls and Spills.
+- Hazards: cable spaghetti spins you, change-freeze ice makes you slide wide
+  in two hairpins, and two rogue cron barrels roll across the road.
+- Use the item with Shift or E, or the ITEM button above DRIFT on touch.
+  On touch, GAS (with auto-gas off) now sits above BRAKE.
+- Toasts say who paged you, and when your Firewall held or your Rollback
+  saved you.
+- The results show the finishing order of all 8, frozen when you cross the
+  line, then your shift report.
+- The same seed and inputs give the same race at any frame rate.
+
 ## 0.2.0
 
 Touch controls: the game plays on a phone or a tablet.

@@ -28,6 +28,7 @@ with WebGL 2, on a desktop, a phone or a tablet.
 | ↓ / S     | Brake, reverse |
 | ← → / A D | Steer          |
 | Space     | Drift (hold)   |
+| Shift / E | Use item       |
 | R         | Respawn        |
 | P / Esc   | Pause          |
 | Enter     | Confirm        |
@@ -40,8 +41,9 @@ control back to the keyboard.
 | --------------------------- | ------------------------------------------- |
 | Left half: drag left, right | Steer                                       |
 | DRIFT (hold)                | Drift                                       |
+| ITEM (above DRIFT)          | Use item                                    |
 | BRAKE (hold)                | Brake, reverse                              |
-| GAS (hold)                  | Accelerate, when auto-gas is off            |
+| GAS (hold, above BRAKE)     | Accelerate, when auto-gas is off            |
 | II (top right)              | Pause                                       |
 | Pause menu                  | Respawn; auto-gas on or off (on by default) |
 

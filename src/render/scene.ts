@@ -5,7 +5,8 @@ import type { Race, RaceEvent } from '../logic/race';
 import { createChaseCamera } from './camera';
 import { buildGates, type GatesHandle } from './gates';
 import { buildHall } from './hall';
-import { buildKart, type KartMesh } from './kartMesh';
+import { buildFleet } from './kartMesh';
+import { buildProps, type PropsHandle } from './props';
 import { createSparks } from './sparks';
 import { buildTrackMesh } from './trackMesh';
 
@@ -20,7 +21,15 @@ export interface SceneHandle {
   resize(): void;
   dispose(): void;
   readonly renderer: THREE.WebGLRenderer;
+  /**
+   * Screen position (CSS px) of each kart's name tag in the last frame, and
+   * its distance from the camera; null when the kart is behind the camera.
+   */
+  tags(): ReadonlyArray<{ x: number; y: number; dist: number } | null>;
 }
+
+/** Karts the fleet can draw: the player and 7 bots. */
+const MAX_KARTS = 8;
 
 const FOG = 0x22385a;
 
@@ -78,7 +87,14 @@ export function createScene(
   let gates: GatesHandle = buildGates(race.track, race.board);
   scene.add(gates.group);
 
-  const karts: KartMesh[] = [];
+  const fleet = buildFleet(MAX_KARTS);
+  scene.add(fleet.group);
+  let props: PropsHandle = buildProps(race.track, race);
+  scene.add(props.group);
+  let wheelSpin: number[] = [];
+  let bodyYaw: number[] = [];
+  let tagPos: Array<{ x: number; y: number; dist: number } | null> = [];
+  const v3 = new THREE.Vector3();
   const sparks = createSparks();
   scene.add(sparks.points);
 
@@ -88,25 +104,11 @@ export function createScene(
   let shake = 0;
   let snap = true;
 
-  const color = (i: number) => {
-    if (i === race.playerId) return DRIVERS[race.config.driverColor]?.color ?? 0xff6b35;
-    return DRIVERS[(race.config.driverColor + i) % DRIVERS.length]?.color ?? 0xffffff;
-  };
-
   const syncKarts = () => {
-    while (karts.length < race.karts.length) {
-      const k = buildKart(0xffffff);
-      karts.push(k);
-      scene.add(k.group);
-    }
-    while (karts.length > race.karts.length) {
-      const k = karts.pop();
-      if (k) {
-        scene.remove(k.group);
-        k.dispose();
-      }
-    }
-    karts.forEach((k, i) => k.setColor(color(i)));
+    fleet.setCount(race.karts.length);
+    race.karts.forEach((k, i) => fleet.setColor(i, DRIVERS[k.driverIndex]?.color ?? 0xffffff));
+    wheelSpin = race.karts.map(() => 0);
+    bodyYaw = race.karts.map(() => 0);
   };
   syncKarts();
 
@@ -135,28 +137,33 @@ export function createScene(
       const dt = Math.min(0.1, (now - lastTime) / 1000);
       lastTime = now;
       race = r;
-      if (karts.length !== r.karts.length) syncKarts();
+      if (wheelSpin.length !== r.karts.length) syncKarts();
 
       let player: Pose | null = null;
       r.karts.forEach((k, i) => {
-        const mesh = karts[i];
-        if (!mesh) return;
         const p = prev[i] ?? { x: k.kart.pos.x, z: k.kart.pos.z, heading: k.kart.heading };
         const pose = {
           x: p.x + (k.kart.pos.x - p.x) * alpha,
           z: p.z + (k.kart.pos.z - p.z) * alpha,
           heading: lerpAngle(p.heading, k.kart.heading, alpha),
         };
-        mesh.group.position.set(pose.x, 0, pose.z);
-        mesh.group.rotation.y = pose.heading;
         // Effects: spin-out turns the body; a drift yaws it into the turn.
         const spin = k.kart.spinTime > 0 ? k.kart.spinTime * 14 : 0;
         const driftYaw = k.kart.driftDir * 0.35;
-        mesh.body.rotation.y += (spin + driftYaw - mesh.body.rotation.y) * (spin ? 1 : 0.2);
-        mesh.body.position.y = k.kart.holdTime > 0 ? 0 : Math.abs(Math.sin(now / 90)) * 0.02;
-        for (const w of mesh.wheels) w.rotation.x += (k.kart.speed * dt) / 0.28;
+        const yaw = bodyYaw[i] ?? 0;
+        bodyYaw[i] = yaw + (spin + driftYaw - yaw) * (spin ? 1 : 0.2);
+        wheelSpin[i] = (wheelSpin[i] ?? 0) + (k.kart.speed * dt) / 0.28;
+        fleet.setPose(i, {
+          ...pose,
+          bodyYaw: bodyYaw[i] ?? 0,
+          bodyY: k.kart.holdTime > 0 ? 0 : Math.abs(Math.sin(now / 90 + i)) * 0.02,
+          wheelSpin: wheelSpin[i] ?? 0,
+          shield: k.shieldTime > 0,
+        });
         if (i === r.playerId) player = pose;
       });
+      fleet.commit();
+      props.update(r, now / 1000);
 
       const pk = r.karts[r.playerId];
       if (pk && player) {
@@ -180,6 +187,17 @@ export function createScene(
       }
       hall.update(now / 1000);
       renderer.render(scene, chase.camera);
+
+      // Name tags: project a point above each kart to the canvas.
+      const w = canvas.clientWidth;
+      const hgt = canvas.clientHeight;
+      tagPos = r.karts.map((k) => {
+        v3.set(k.kart.pos.x, 2.1, k.kart.pos.z);
+        const dist = v3.distanceTo(chase.camera.position);
+        v3.project(chase.camera);
+        if (v3.z > 1 || v3.z < -1) return null;
+        return { x: ((v3.x + 1) / 2) * w, y: ((1 - v3.y) / 2) * hgt, dist };
+      });
     },
     onEvents(events: RaceEvent[]) {
       let reshuffled = false;
@@ -190,6 +208,9 @@ export function createScene(
         }
         if (e.type === 'sla-breach' && e.kartId === race.playerId) shake = 0.6;
         if (e.type === 'wrong-gate' && e.kartId === race.playerId) shake = Math.max(shake, 0.25);
+        if (e.type === 'hit' && e.kartId === race.playerId && e.outcome === 'spun') {
+          shake = Math.max(shake, 0.3);
+        }
       }
       if (reshuffled) gates.sync(race.board);
     },
@@ -199,6 +220,10 @@ export function createScene(
       gates.dispose();
       gates = buildGates(r.track, r.board);
       scene.add(gates.group);
+      scene.remove(props.group);
+      props.dispose();
+      props = buildProps(r.track, r);
+      scene.add(props.group);
       syncKarts();
       sparks.clear();
       capture(r);
@@ -206,10 +231,12 @@ export function createScene(
       snap = true;
     },
     resize,
+    tags: () => tagPos,
     dispose() {
       window.removeEventListener('resize', resize);
       gates.dispose();
-      for (const k of karts) k.dispose();
+      fleet.dispose();
+      props.dispose();
       sparks.dispose();
       scene.traverse((o) => {
         if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) {

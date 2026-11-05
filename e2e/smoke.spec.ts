@@ -48,6 +48,19 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
   await expect.poll(() => screen(page)).toBe('countdown');
   await waitRacing(page);
 
+  // Phase 2: the player and 7 bots.
+  const race = await page.evaluate(() => ({
+    karts: window.__oncallKart?.kartCount(),
+    place: window.__oncallKart?.place(),
+  }));
+  expect(race.karts).toBe(8);
+  expect(race.place).toBeGreaterThanOrEqual(1);
+  expect(race.place).toBeLessThanOrEqual(8);
+  await expect(page.locator('.hud-place')).toContainText('/ 8');
+  if (process.env.SCREENSHOTS) {
+    await page.screenshot({ path: `screenshots/${test.info().project.name}-grid.png` });
+  }
+
   await holdUp(page, 2000);
   expect(await speed(page)).toBeGreaterThan(5);
   await expect(page.locator('.ticket-head')).toContainText('#0001');
@@ -126,5 +139,52 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(300);
 
+  expect(errors).toEqual([]);
+});
+
+test('items, a Page, and the results of an 8-kart race', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+  page.on('pageerror', (err) => errors.push(err.message));
+  const shot = async (name: string) => {
+    if (process.env.SCREENSHOTS) {
+      await page.screenshot({ path: `screenshots/${test.info().project.name}-${name}.png` });
+    }
+  };
+
+  await page.goto('/oncall-kart/?seed=3&debug=1');
+  await expect.poll(() => screen(page)).toBe('title');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await waitRacing(page);
+
+  // Coffee: the item key boosts the kart past its top speed.
+  await page.keyboard.down('ArrowUp');
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => window.__oncallKart?.giveItem?.('coffee'));
+  await expect(page.locator('.hud-item')).toContainText('COFFEE');
+  await page.keyboard.press('KeyE');
+  await expect.poll(() => speed(page), { timeout: 3000 }).toBeGreaterThan(TUNING.topSpeed + 0.5);
+  await expect(page.locator('.hud-item')).toContainText('NO ITEM');
+  await page.keyboard.up('ArrowUp');
+
+  // The autopilot drives the rest; a Page goes at the kart ahead.
+  await page.evaluate(() => window.__oncallKart?.autopilot?.(true));
+  await page.evaluate(() => window.__oncallKart?.giveItem?.('page'));
+  await page.keyboard.press('ShiftLeft');
+  await expect(page.locator('.hud-item')).toContainText('NO ITEM');
+  await page.waitForTimeout(300);
+  await shot('page');
+  await page.waitForTimeout(5000);
+  await shot('mid-race');
+
+  // The 1-lap race ends; the results list all 8 karts, the player among them.
+  await expect.poll(() => screen(page), { timeout: 100_000 }).toBe('results');
+  await expect(page.locator('.order li')).toHaveCount(8);
+  await expect(page.locator('.order li.you')).toHaveCount(1);
+  await shot('results');
   expect(errors).toEqual([]);
 });

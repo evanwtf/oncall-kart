@@ -1,6 +1,135 @@
-import type { Race, RaceEvent } from '../logic/race';
+import { DRIVERS } from '../logic/drivers';
+import type { ItemKind } from '../logic/items';
 import { STEP_COLORS } from '../logic/ops';
+import { standings, type Race, type RaceEvent } from '../logic/race';
 import { nextStep } from '../logic/ticket';
+import type { Track } from '../logic/track';
+
+/** 1st, 2nd, 3rd, 4th ... */
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}
+
+export const ITEM_LABELS: Record<ItemKind, { icon: string; name: string }> = {
+  coffee: { icon: '☕', name: 'COFFEE' },
+  rollback: { icon: '↺', name: 'ROLLBACK' },
+  firewall: { icon: '⬢', name: 'FIREWALL' },
+  page: { icon: '📟', name: 'PAGE' },
+  spill: { icon: '💧', name: 'SPILL' },
+};
+
+const driverName = (race: Race, id: number | null) =>
+  id === null ? '' : (DRIVERS[race.karts[id]?.driverIndex ?? -1]?.name ?? 'someone');
+
+/**
+ * The toast for a hit event, from the player's side: hits on the player, and
+ * the player's Pages and puddles that hit someone. null: no toast.
+ */
+export function hitToast(
+  e: Extract<RaceEvent, { type: 'hit' }>,
+  race: Race,
+): { text: string; kind: string } | null {
+  const me = race.playerId;
+  if (e.kartId !== me) {
+    if (e.byId !== me || e.outcome !== 'spun') return null;
+    const who = driverName(race, e.kartId).toUpperCase();
+    return { text: e.kind === 'page' ? `YOU PAGED ${who}` : `${who} SLIPPED`, kind: 'good small' };
+  }
+  if (e.outcome === 'blocked') return { text: 'FIREWALL HELD', kind: 'good' };
+  if (e.outcome === 'rolled-back') return { text: 'ROLLED BACK', kind: 'good' };
+  if (e.outcome !== 'spun') return null;
+  const by = driverName(race, e.byId).toUpperCase();
+  switch (e.kind) {
+    case 'page':
+      return { text: `PAGED BY ${by}`, kind: 'bad' };
+    case 'spill':
+      return { text: e.byId === me ? 'YOUR OWN COFFEE' : `${by}'S COFFEE`, kind: 'bad' };
+    case 'cable':
+      return { text: 'CABLE SPAGHETTI', kind: 'bad' };
+    case 'cron':
+      return { text: 'ROGUE CRON JOB', kind: 'bad' };
+    case 'wrong-gate':
+      // The wrong-gate event has its own toast.
+      return null;
+  }
+}
+
+/** A tag above a kart: its screen position and distance, or null when off screen. */
+export type TagPos = { x: number; y: number; dist: number } | null;
+
+/** Draws the track outline once, then the karts as dots each frame. */
+function createMinimap(canvas: HTMLCanvasElement) {
+  let key: Track | null = null;
+  let outline: HTMLCanvasElement | null = null;
+  let toPx = (x: number, z: number): [number, number] => [x, z];
+  const size = canvas.width;
+
+  const build = (track: Track) => {
+    const pts = Array.from({ length: 200 }, (_, i) => track.pointAt((i / 200) * track.length));
+    const xs = pts.map((p) => p.x);
+    const zs = pts.map((p) => p.z);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minZ = Math.min(...zs);
+    const maxZ = Math.max(...zs);
+    const pad = 10;
+    const k = (size - 2 * pad) / Math.max(maxX - minX, maxZ - minZ);
+    const ox = (size - (maxX - minX) * k) / 2;
+    const oz = (size - (maxZ - minZ) * k) / 2;
+    // North (+z) is up; east (+x) is left, as the chase camera sees it facing north.
+    toPx = (x, z) => [size - (ox + (x - minX) * k), size - (oz + (z - minZ) * k)];
+    outline = document.createElement('canvas');
+    outline.width = size;
+    outline.height = size;
+    const c = outline.getContext('2d');
+    if (!c) return;
+    c.lineJoin = 'round';
+    c.beginPath();
+    pts.forEach((p, i) => {
+      const [x, y] = toPx(p.x, p.z);
+      if (i === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+    });
+    c.closePath();
+    c.strokeStyle = 'rgba(230, 237, 243, 0.35)';
+    c.lineWidth = 7;
+    c.stroke();
+    // The finish line.
+    const [fx, fy] = toPx(pts[0]?.x ?? 0, pts[0]?.z ?? 0);
+    c.fillStyle = '#e8eef5';
+    c.fillRect(fx - 5, fy - 1.5, 10, 3);
+  };
+
+  return (race: Race) => {
+    if (race.track !== key) {
+      key = race.track;
+      build(race.track);
+    }
+    const c = canvas.getContext('2d');
+    if (!c || !outline) return;
+    c.clearRect(0, 0, size, size);
+    c.drawImage(outline, 0, 0);
+    // The player last, so it draws on top.
+    const order = [...race.karts].sort(
+      (a, b) => Number(a.id === race.playerId) - Number(b.id === race.playerId),
+    );
+    for (const k of order) {
+      const [x, y] = toPx(k.kart.pos.x, k.kart.pos.z);
+      const me = k.id === race.playerId;
+      c.beginPath();
+      c.arc(x, y, me ? 6 : 4, 0, Math.PI * 2);
+      c.fillStyle = `#${(DRIVERS[k.driverIndex]?.color ?? 0xffffff).toString(16).padStart(6, '0')}`;
+      c.fill();
+      if (me) {
+        c.lineWidth = 2;
+        c.strokeStyle = '#ffffff';
+        c.stroke();
+      }
+    }
+  };
+}
 
 /** m:ss.t */
 export function formatTime(seconds: number): string {
@@ -14,7 +143,8 @@ const TOAST_SECONDS = 1.6;
 
 export interface Hud {
   el: HTMLElement;
-  update(race: Race): void;
+  /** tags: the kart tag positions from the scene, by kart id. */
+  update(race: Race, tags?: readonly TagPos[]): void;
   onEvents(events: RaceEvent[], race: Race): void;
   clear(): void;
 }
@@ -47,6 +177,22 @@ export function createHud(root: HTMLElement): Hud {
   const slaFill = div('sla-fill', sla);
   const slaText = div('sla-text', card);
 
+  const place = div('hud-place', el);
+  const placeNum = div('place-num', place);
+  const placeOf = div('place-of', place);
+  const itemSlot = div('hud-item', el);
+  const itemIcon = div('item-icon', itemSlot);
+  const itemName = div('item-name', itemSlot);
+  const mapEl = document.createElement('canvas');
+  mapEl.className = 'minimap';
+  mapEl.width = 160;
+  mapEl.height = 160;
+  el.appendChild(mapEl);
+  const drawMap = createMinimap(mapEl);
+  const tagLayer = div('tags', el);
+  let tagEls: HTMLElement[] = [];
+  let lastPlace = 0;
+
   const speed = div('hud-speed', el);
   const toasts = div('toasts', el);
   let toastList: { el: HTMLElement; until: number }[] = [];
@@ -59,11 +205,61 @@ export function createHud(root: HTMLElement): Hud {
     while (toastList.length > 3) toastList.shift()?.el.remove();
   };
 
+  const updateTags = (race: Race, tags: readonly TagPos[]) => {
+    if (tagEls.length !== race.karts.length) {
+      for (const t of tagEls) t.remove();
+      tagEls = race.karts.map((k) => {
+        const t = div('tag', tagLayer);
+        t.textContent = DRIVERS[k.driverIndex]?.name ?? '';
+        t.style.borderColor = `#${(DRIVERS[k.driverIndex]?.color ?? 0xffffff).toString(16).padStart(6, '0')}`;
+        return t;
+      });
+    }
+    race.karts.forEach((k, i) => {
+      const t = tagEls[i];
+      if (!t) return;
+      const p = tags[i];
+      // The player has no tag; others fade out between 25 m and 60 m.
+      const alpha = !p || k.id === race.playerId ? 0 : Math.max(0, Math.min(1, (60 - p.dist) / 35));
+      if (alpha === 0 || !p) {
+        t.style.display = 'none';
+        return;
+      }
+      t.style.display = '';
+      t.style.opacity = alpha.toFixed(2);
+      t.style.transform = `translate(${p.x.toFixed(0)}px, ${p.y.toFixed(0)}px) translate(-50%, -100%)`;
+    });
+  };
+
   return {
     el,
-    update(race) {
+    update(race, tags = []) {
       const k = race.karts[race.playerId];
       if (!k) return;
+      const order = race.finalOrder ?? standings(race);
+      const myPlace = order.indexOf(k.id) + 1;
+      setText(placeNum, ordinal(myPlace));
+      setText(placeOf, `/ ${race.karts.length}`);
+      if (myPlace !== lastPlace) {
+        if (lastPlace !== 0) {
+          place.classList.remove('up', 'down');
+          // Restart the animation.
+          void place.offsetWidth;
+          place.classList.add(myPlace < lastPlace ? 'up' : 'down');
+        }
+        lastPlace = myPlace;
+      }
+      const item = k.item === null ? null : ITEM_LABELS[k.item];
+      setText(itemIcon, item?.icon ?? '·');
+      setText(itemName, item?.name ?? 'NO ITEM');
+      itemSlot.classList.toggle('empty', item === null);
+      if (mapEl.offsetParent !== null) {
+        // Under the ticket card when the card is on the right.
+        const top = card.offsetTop + card.offsetHeight + 8;
+        mapEl.style.setProperty('--map-top', `${top}px`);
+        drawMap(race);
+      }
+      updateTags(race, tags);
       const shownLap = Math.min(race.config.laps, k.lap.completed + 1);
       setText(lap, `LAP ${shownLap}/${race.config.laps}`);
       setText(time, formatTime(k.finishedAt ?? race.time));
@@ -117,7 +313,7 @@ export function createHud(root: HTMLElement): Hud {
     onEvents(events, race) {
       const now = race.time;
       for (const e of events) {
-        if ('kartId' in e && e.kartId !== race.playerId) continue;
+        if (e.type === 'hit' || ('kartId' in e && e.kartId !== race.playerId)) continue;
         if (e.type === 'wrong-gate') toast('NOT IN THE RUNBOOK', 'bad', now);
         if (e.type === 'ticket-closed') toast('TICKET CLOSED: BOOST', 'good', now);
         if (e.type === 'sla-breach') toast('PAGED: SLA BREACH', 'bad', now);
@@ -132,11 +328,20 @@ export function createHud(root: HTMLElement): Hud {
         }
         if (e.type === 'respawn') toast('RESPAWN', 'info small', now);
       }
+      for (const e of events) {
+        if (e.type !== 'hit') continue;
+        const t = hitToast(e, race);
+        if (t) toast(t.text, t.kind, now);
+      }
     },
     clear() {
       for (const t of toastList) t.el.remove();
       toastList = [];
       stepsKey = '';
+      lastPlace = 0;
+      place.classList.remove('up', 'down');
+      for (const t of tagEls) t.remove();
+      tagEls = [];
     },
   };
 }

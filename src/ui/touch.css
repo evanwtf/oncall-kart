@@ -73,7 +73,7 @@
   border-color: var(--amber);
 }
 
-/* Right thumb: GAS above DRIFT, BRAKE to the left of DRIFT. */
+/* Right thumb: ITEM above DRIFT, BRAKE to the left of DRIFT, GAS (when auto-gas is off) above BRAKE. */
 .touch-buttons {
   position: absolute;
   right: calc(var(--safe-right) + 16px);
@@ -82,7 +82,7 @@
   grid-template-columns: var(--btn) var(--btn-big);
   grid-template-rows: var(--btn) var(--btn-big);
   grid-template-areas:
-    '. gas'
+    'gas item'
     'brake drift';
   gap: var(--gap);
   align-items: end;
@@ -128,6 +128,11 @@
   border-color: rgba(61, 220, 151, 0.7);
 }
 
+.touch-item {
+  grid-area: item;
+  border-color: rgba(111, 211, 255, 0.75);
+}
+
 .touch-pause {
   position: absolute;
   top: calc(var(--safe-top) + 12px);
@@ -154,6 +159,15 @@
 
 #ui.touch-on .ticket {
   top: calc(var(--safe-top) + 12px);
+  right: calc(var(--safe-right) + 72px);
+}
+
+#ui.touch-on .hud-place,
+#ui.touch-on .hud-item {
+  left: calc(var(--safe-left) + 12px);
+}
+
+#ui.touch-on .minimap {
   right: calc(var(--safe-right) + 72px);
 }
 
@@ -267,6 +281,18 @@
   .caption {
     font-size: 16px;
   }
+
+  .result-cols {
+    gap: 20px;
+  }
+
+  .order {
+    font-size: 13px;
+  }
+
+  .order li {
+    padding: 0 6px;
+  }
 }
 
 /* A short landscape phone: drivers in four columns, so setup fits. */
@@ -337,11 +363,53 @@
   .ticket-steps .step:not(.next) {
     display: none;
   }
+
+  /* Place and item stack under the lap panel, clear of the gate signs in the middle. */
+  .hud-place,
+  #ui.touch-on .hud-place {
+    top: calc(var(--safe-top) + 80px);
+    padding: 2px 10px;
+  }
+
+  .place-num {
+    font-size: 20px;
+  }
+
+  .place-of {
+    font-size: 12px;
+  }
+
+  .hud-item,
+  #ui.touch-on .hud-item {
+    top: calc(var(--safe-top) + 114px);
+    padding: 2px 8px;
+  }
+
+  .item-icon {
+    font-size: 16px;
+  }
+
+  .item-name {
+    font-size: 11px;
+  }
+
+  /* No room for the minimap: the place shows the race. */
+  .minimap {
+    display: none;
+  }
+
+  .tag {
+    font-size: 10px;
+  }
 }
 
 /* On a phone the pause menu needs the middle of the screen. */
 #ui.touch-on[data-screen='paused'] .ticket,
-#ui.touch-on[data-screen='paused'] .hud-speed {
+#ui.touch-on[data-screen='paused'] .hud-speed,
+#ui.touch-on[data-screen='paused'] .hud-place,
+#ui.touch-on[data-screen='paused'] .hud-item,
+#ui.touch-on[data-screen='paused'] .minimap,
+#ui.touch-on[data-screen='paused'] .tags {
   display: none;
 }
 
@@ -369,6 +437,24 @@
   /* Toasts below the ticket card. */
   .toasts {
     top: 40%;
+  }
+
+  /* The place beside the lap panel; the item at the bottom left, under the thumb. */
+  #ui .hud-place,
+  #ui.touch-on .hud-place {
+    top: calc(var(--safe-top) + 12px);
+    left: calc(var(--safe-left) + 128px);
+  }
+
+  #ui .hud-item,
+  #ui.touch-on .hud-item {
+    top: auto;
+    bottom: calc(var(--safe-bottom) + 16px);
+    left: calc(var(--safe-left) + 12px);
+  }
+
+  .minimap {
+    display: none;
   }
 }
 

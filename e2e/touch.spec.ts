@@ -67,7 +67,34 @@ async function expectLayout(page: Page, sels: string[]) {
 }
 
 const PAD_ID = 41;
-const HUD_AND_CONTROLS = ['.hud-left', '.ticket', '.hud-speed', '.touch-buttons', '.touch-pause'];
+const HUD_AND_CONTROLS = [
+  '.hud-left',
+  '.hud-place',
+  '.hud-item',
+  '.ticket',
+  '.hud-speed',
+  '.touch-buttons',
+  '.touch-pause',
+];
+
+/**
+ * The place, the item slot and the minimap keep clear of the gate signs: the
+ * middle 40% of the width in the top half of a landscape screen. The minimap
+ * may be hidden on a short screen; when it shows, it must not cover the card.
+ */
+async function expectClearOfSigns(page: Page) {
+  const vp = page.viewportSize();
+  if (!vp || vp.height > vp.width) return;
+  const signs: Box = { x: vp.width * 0.3, y: 0, width: vp.width * 0.4, height: vp.height / 2 };
+  for (const sel of ['.hud-place', '.hud-item']) {
+    expect(overlaps(await box(page, sel), signs), `${sel} covers the gate signs`).toBe(false);
+  }
+  if (await page.locator('.minimap').isVisible()) {
+    const map = await box(page, '.minimap');
+    expect(overlaps(map, signs), 'the minimap covers the gate signs').toBe(false);
+    expect(overlaps(map, await box(page, '.ticket')), 'the minimap covers the card').toBe(false);
+  }
+}
 
 /** The tallest ticket card: the longest title, at the longest pit step. */
 function worstTicket(): { type: TicketType; stepIndex: number } {
@@ -157,6 +184,8 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   await setWorstTicket(page);
   await expectLayout(page, HUD_AND_CONTROLS);
   await expectShortTicket(page);
+  await expectClearOfSigns(page);
+  await expect(page.locator('.touch-item')).toBeVisible();
 
   // Auto-gas drives with no button held.
   await page.waitForTimeout(2000);
@@ -247,9 +276,19 @@ test('touch: a short landscape screen, auto-gas off, the tallest ticket', async 
   await tapToRace(page);
 
   await expect(page.locator('.touch-gas')).toBeVisible();
+  await expect(page.locator('.touch-item')).toBeVisible();
   await setWorstTicket(page);
+  // An item in the slot: its longest name.
+  await page.evaluate(() => window.__oncallKart?.giveItem?.('rollback'));
+  await expect(page.locator('.hud-item')).toContainText('ROLLBACK');
   await expectLayout(page, HUD_AND_CONTROLS);
   await expectShortTicket(page);
+  await expectClearOfSigns(page);
+  await shot(page, '667x331-race');
+
+  // The ITEM button uses the item.
+  await page.locator('.touch-item').tap();
+  await expect(page.locator('.hud-item')).toContainText('NO ITEM');
 
   // Parked short of a gate row: the signs stay clear of the card.
   const rows = await page.evaluate(() => window.__oncallKart?.rowS() ?? []);

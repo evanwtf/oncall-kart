@@ -16,6 +16,7 @@ const BRAKE = ['ArrowDown', 'KeyS'];
 const LEFT = ['ArrowLeft', 'KeyA'];
 const RIGHT = ['ArrowRight', 'KeyD'];
 const DRIFT = ['Space'];
+const ITEM = ['ShiftLeft', 'ShiftRight', 'KeyE'];
 
 const ACTIONS: Record<string, Action> = {
   Enter: 'confirm',
@@ -34,7 +35,7 @@ const ACTIONS: Record<string, Action> = {
   KeyD: 'right',
 };
 
-const DRIVE = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT, ...DRIFT]);
+const DRIVE = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT, ...DRIFT, ...ITEM]);
 
 /** A key that drives the kart. A press means the player is on the keyboard now. */
 export function isDriveKey(code: string): boolean {
@@ -47,12 +48,15 @@ const PREVENT = new Set([...DRIVE, 'Backspace']);
 export function createKeyboard(target: Window): Keyboard {
   const held = new Set<string>();
   let queue: Action[] = [];
+  // A tap of the item key shorter than a frame still counts: it reads as held once.
+  let itemTap = false;
   const any = (codes: readonly string[]) => codes.some((c) => held.has(c));
 
   const onDown = (e: KeyboardEvent) => {
     if (PREVENT.has(e.code)) e.preventDefault();
     held.add(e.code);
     if (e.repeat) return;
+    if (ITEM.includes(e.code)) itemTap = true;
     const action = ACTIONS[e.code];
     if (action) queue.push(action);
   };
@@ -62,7 +66,10 @@ export function createKeyboard(target: Window): Keyboard {
     else held.delete(e.code);
   };
   // A key released while the window has no focus never sends keyup: clear all.
-  const clear = () => held.clear();
+  const clear = () => {
+    held.clear();
+    itemTap = false;
+  };
   const onVisibility = () => {
     if (target.document.visibilityState === 'hidden') clear();
   };
@@ -73,12 +80,17 @@ export function createKeyboard(target: Window): Keyboard {
   target.document.addEventListener('visibilitychange', onVisibility);
 
   return {
-    read: () => ({
-      throttle: any(THROTTLE) ? 1 : 0,
-      brake: any(BRAKE) ? 1 : 0,
-      steer: (any(LEFT) ? 1 : 0) - (any(RIGHT) ? 1 : 0),
-      drift: any(DRIFT),
-    }),
+    read: () => {
+      const item = any(ITEM) || itemTap;
+      itemTap = false;
+      return {
+        throttle: any(THROTTLE) ? 1 : 0,
+        brake: any(BRAKE) ? 1 : 0,
+        steer: (any(LEFT) ? 1 : 0) - (any(RIGHT) ? 1 : 0),
+        drift: any(DRIFT),
+        item,
+      };
+    },
     takeActions: () => {
       const out = queue;
       queue = [];
@@ -104,7 +116,7 @@ export interface InputSource {
 
 /**
  * Merge input sources. steer: the largest magnitude wins. throttle and brake:
- * the max. drift: any source. Actions keep source order.
+ * the max. drift and item: any source. Actions keep source order.
  */
 export function createInput(sources: readonly InputSource[]): InputSource {
   return {
@@ -116,6 +128,7 @@ export function createInput(sources: readonly InputSource[]): InputSource {
         out.throttle = Math.max(out.throttle, i.throttle);
         out.brake = Math.max(out.brake, i.brake);
         out.drift ||= i.drift;
+        if (i.item) out.item = true;
       }
       return out;
     },

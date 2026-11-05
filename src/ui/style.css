@@ -450,3 +450,154 @@ body {
     opacity: 0;
   }
 }
+
+/* Race place, under the lap panel; it pops on a change. */
+.hud-place {
+  position: absolute;
+  top: 124px;
+  left: 16px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.place-num {
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.place-of {
+  font-size: 16px;
+  color: var(--dim);
+}
+
+.hud-place.up {
+  animation: place-up 0.5s ease-out;
+}
+
+.hud-place.down {
+  animation: place-down 0.5s ease-out;
+}
+
+@keyframes place-up {
+  from {
+    transform: scale(1.35);
+    color: var(--green);
+  }
+}
+
+@keyframes place-down {
+  from {
+    transform: scale(0.8);
+    color: var(--red);
+  }
+}
+
+/* The held item: an icon and its name. */
+.hud-item {
+  position: absolute;
+  top: 178px;
+  left: 16px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 2px solid var(--amber);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-item.empty {
+  border-color: transparent;
+  color: var(--dim);
+}
+
+.item-icon {
+  font-size: 24px;
+  width: 1.2em;
+  text-align: center;
+}
+
+.item-name {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* The minimap: top right, under the ticket card (hud.ts sets --map-top). */
+.minimap {
+  position: absolute;
+  top: var(--map-top, 260px);
+  right: 16px;
+  width: 128px;
+  height: 128px;
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.tags {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(10, 16, 26, 0.6);
+  border-bottom: 2px solid;
+}
+
+/* Results: the finishing order beside the shift report. */
+.result-cols {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.order {
+  text-align: left;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 17px;
+}
+
+.order li {
+  display: grid;
+  grid-template-columns: 3em 14px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.order li.you {
+  background: rgba(242, 160, 61, 0.25);
+  font-weight: 800;
+}
+
+.order .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.order .time {
+  color: var(--dim);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}

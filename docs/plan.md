@@ -20,7 +20,8 @@ Shipped in 0.2.0. Detailed plan:
 ## Phase 2: rivals, items, hazards
 
 Seven bot rivals with their own tickets. Item crates and the five items.
-The three hazards.
+The three hazards. Shipped in 0.3.0. Plan:
+[superpowers/plans/2026-11-04-oncall-kart-phase2.md](superpowers/plans/2026-11-04-oncall-kart-phase2.md).
 
 ## Phase 3: sound and polish
 

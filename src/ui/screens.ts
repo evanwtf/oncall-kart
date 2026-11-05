@@ -1,7 +1,7 @@
 import type { Action } from '../input';
 import { DRIVERS } from '../logic/drivers';
 import type { Race, RaceEvent } from '../logic/race';
-import { createHud, formatTime } from './hud';
+import { createHud, formatTime, ordinal, type TagPos } from './hud';
 
 export type Screen = 'title' | 'setup' | 'countdown' | 'racing' | 'paused' | 'results';
 
@@ -18,6 +18,8 @@ export interface UiState {
   /** The touch controls are on: show tap prompts and the touch-only pause items. */
   touch: boolean;
   autoGas: boolean;
+  /** Kart name-tag positions from the scene, by kart id. */
+  tags?: readonly TagPos[];
 }
 
 /** What a tap or a click on a menu asks the game to do. */
@@ -116,8 +118,13 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   el('p', 'prompt no-touch', 'Press Enter', title);
   el('p', 'prompt only-touch', 'Tap to start', title);
   el('p', 'hint', 'Close tickets: drive through the gates in runbook order.', title);
-  el('p', 'hint no-touch', '↑ drive · ← → steer · Space drift · R respawn · P pause', title);
-  el('p', 'hint only-touch', 'Left thumb steers · DRIFT and BRAKE on the right', title);
+  el(
+    'p',
+    'hint no-touch',
+    '↑ drive · ← → steer · Space drift · E item · R respawn · P pause',
+    title,
+  );
+  el('p', 'hint only-touch', 'Left thumb steers · DRIFT, BRAKE and ITEM on the right', title);
   el('p', 'version', `v${__APP_VERSION__}`, title);
   onTap(title, () => handlers.action('confirm'));
 
@@ -169,10 +176,15 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   );
   el('p', 'hint no-touch', '↑ ↓ and Enter · P or Esc resumes', pause);
 
-  // Results.
+  // Results: the finishing order, then the player's shift report.
   const results = el('div', 'screen results', undefined, panels);
-  el('h2', '', 'Shift report', results);
-  const table = el('dl', 'report', undefined, results);
+  const resultCols = el('div', 'result-cols', undefined, results);
+  const orderCol = el('div', 'result-order', undefined, resultCols);
+  el('h2', '', 'Finishing order', orderCol);
+  const orderList = el('ol', 'order', undefined, orderCol);
+  const reportCol = el('div', 'result-report', undefined, resultCols);
+  el('h2', '', 'Shift report', reportCol);
+  const table = el('dl', 'report', undefined, reportCol);
   const row = (label: string) => {
     el('dt', '', label, table);
     return el('dd', '', '', table);
@@ -184,7 +196,8 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
     wrong: row('Wrong gates'),
     breaches: row('SLA breaches'),
   };
-  const caption = el('p', 'caption', '', results);
+  const caption = el('p', 'caption', '', reportCol);
+  let orderKey = '';
   const resultActions = el('div', 'actions', undefined, results);
   onTap(button('action', 'Setup', resultActions), () => handlers.action('back'));
   onTap(button('action primary', 'Race again', resultActions), () => handlers.action('confirm'));
@@ -241,7 +254,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
           if (e.textContent !== text) e.textContent = text;
         }
       }
-      if (race && !hud.el.hidden) hud.update(race);
+      if (race && !hud.el.hidden) hud.update(race, state.tags);
 
       if (race && (state.screen === 'countdown' || state.screen === 'racing')) {
         const text =
@@ -262,6 +275,33 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
           rows.wrong.textContent = String(k.stats.wrongGates);
           rows.breaches.textContent = String(k.stats.slaBreaches);
           caption.textContent = shiftCaption(k.stats);
+        }
+        const order = race.finalOrder ?? [];
+        const key = order.join(',');
+        if (key !== orderKey) {
+          orderKey = key;
+          orderList.replaceChildren(
+            ...order.map((id, i) => {
+              const kart = race.karts[id];
+              const d = DRIVERS[kart?.driverIndex ?? -1];
+              const li = el('li', id === race.playerId ? 'you' : '');
+              el('span', 'pos', ordinal(i + 1), li);
+              const sw = el('span', 'swatch', undefined, li);
+              sw.style.background = hex(d?.color ?? 0xffffff);
+              el(
+                'span',
+                'name',
+                id === race.playerId ? `${d?.name ?? ''} (you)` : (d?.name ?? ''),
+                li,
+              );
+              const t = kart?.finishedAt;
+              // Karts still racing when the player finished show no time.
+              const done =
+                t !== null && t !== undefined && t <= (race.karts[race.playerId]?.finishedAt ?? 0);
+              el('span', 'time', done ? formatTime(t) : 'on shift', li);
+              return li;
+            }),
+          );
         }
       }
     },

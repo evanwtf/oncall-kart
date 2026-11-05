@@ -181,6 +181,24 @@ describe('createTouch', () => {
     expect(t.read().steer).toBe(0);
   });
 
+  it('holds the item while the ITEM button is down', () => {
+    const t = make();
+    const item = q('.touch-item');
+    expect(item.textContent).toBe('ITEM');
+    ptr(item, 'pointerdown', 7);
+    expect(t.read().item).toBe(true);
+    ptr(window, 'pointerup', 7);
+    expect(t.read().item).toBe(false);
+  });
+
+  it('reads a tap on ITEM shorter than a frame once', () => {
+    const t = make();
+    ptr(q('.touch-item'), 'pointerdown', 8);
+    ptr(window, 'pointerup', 8);
+    expect(t.read().item).toBe(true);
+    expect(t.read().item).toBe(false);
+  });
+
   it('releases everything on window blur', () => {
     const t = make();
     ptr(q('.touch-pad'), 'pointerdown', 1, 100, 300);
@@ -188,7 +206,7 @@ describe('createTouch', () => {
     ptr(q('.touch-drift'), 'pointerdown', 2);
     ptr(q('.touch-brake'), 'pointerdown', 3);
     window.dispatchEvent(new Event('blur'));
-    expect(t.read()).toEqual({ throttle: 1, brake: 0, steer: 0, drift: false });
+    expect(t.read()).toEqual({ throttle: 1, brake: 0, steer: 0, drift: false, item: false });
   });
 
   it('releases everything when the tab hides', () => {
@@ -338,6 +356,12 @@ describe('createInput', () => {
     const a = fixed({ throttle: 1, brake: 0, steer: 0, drift: false });
     const b = fixed({ throttle: 0, brake: 1, steer: 0, drift: true });
     expect(createInput([a, b]).read()).toEqual({ throttle: 1, brake: 1, steer: 0, drift: true });
+  });
+
+  it('item: any source', () => {
+    const a = fixed({ ...NO_INPUT, item: true });
+    expect(createInput([fixed(NO_INPUT), a]).read().item).toBe(true);
+    expect(createInput([fixed(NO_INPUT)]).read().item).toBeUndefined();
   });
 
   it('no sources read as no input', () => {

@@ -6,7 +6,7 @@ import { canvasTexture, hazardTexture } from './textures';
 const STEP = 2; // metres between ribbon samples
 
 /** A flat or vertical ribbon along the track between two lateral offsets (functions of s). */
-function ribbon(
+export function ribbon(
   track: Track,
   from: number,
   to: number,

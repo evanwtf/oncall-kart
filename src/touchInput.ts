@@ -53,7 +53,7 @@ export interface TouchControls {
   dispose(): void;
 }
 
-type Hold = 'drift' | 'brake' | 'gas';
+type Hold = 'item' | 'drift' | 'brake' | 'gas';
 
 function make<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -79,7 +79,7 @@ function capture(el: HTMLElement, id: number): void {
 
 /**
  * On-screen controls: a steering pad on the left half, hold buttons on the
- * right, and a pause button at the top right. Each pointer is tracked by its
+ * right (ITEM, GAS, BRAKE, DRIFT), and a pause button at the top right. Each pointer is tracked by its
  * pointerId, so steering and drift work at the same time.
  */
 export function createTouch(root: HTMLElement): TouchControls {
@@ -92,6 +92,7 @@ export function createTouch(root: HTMLElement): TouchControls {
 
   const buttons = make('div', 'touch-buttons', el);
   const holdEls: Record<Hold, HTMLElement> = {
+    item: make('div', 'touch-btn touch-item', buttons, 'ITEM'),
     gas: make('div', 'touch-btn touch-gas', buttons, 'GAS'),
     brake: make('div', 'touch-btn touch-brake', buttons, 'BRAKE'),
     drift: make('div', 'touch-btn touch-drift', buttons, 'DRIFT'),
@@ -107,7 +108,12 @@ export function createTouch(root: HTMLElement): TouchControls {
   let padX = 0;
   let padY = 0;
   let steer = 0;
-  const held: Record<Hold, Set<number>> = { drift: new Set(), brake: new Set(), gas: new Set() };
+  const held: Record<Hold, Set<number>> = {
+    item: new Set(),
+    drift: new Set(),
+    brake: new Set(),
+    gas: new Set(),
+  };
 
   const drawKnob = (dx: number) => {
     const shown = Math.max(-FULL_LOCK_PX, Math.min(FULL_LOCK_PX, dx));
@@ -129,6 +135,7 @@ export function createTouch(root: HTMLElement): TouchControls {
   };
 
   const releaseAll = () => {
+    itemTap = false;
     releasePad();
     for (const s of Object.values(held)) s.clear();
     refresh();
@@ -155,9 +162,12 @@ export function createTouch(root: HTMLElement): TouchControls {
     drawKnob(0);
   };
 
+  // A tap on ITEM shorter than a frame still counts: it reads as held once.
+  let itemTap = false;
   const holdDown = (k: Hold) => (e: PointerEvent) => {
     e.preventDefault();
     held[k].add(e.pointerId);
+    if (k === 'item') itemTap = true;
     capture(holdEls[k], e.pointerId);
     refresh();
   };
@@ -216,11 +226,14 @@ export function createTouch(root: HTMLElement): TouchControls {
       if (!visible) return NO_INPUT;
       const brake = held.brake.size > 0;
       const gas = autoGas ? !brake : held.gas.size > 0;
+      const item = held.item.size > 0 || itemTap;
+      itemTap = false;
       return {
         throttle: gas ? 1 : 0,
         brake: brake ? 1 : 0,
         steer,
         drift: held.drift.size > 0,
+        item,
       };
     },
     takeActions: () => {

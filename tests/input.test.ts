@@ -49,6 +49,24 @@ describe('keyboard', () => {
     expect(kb.read().steer).toBe(0);
   });
 
+  it('maps Shift and E to the item', () => {
+    for (const code of ['ShiftLeft', 'ShiftRight', 'KeyE']) {
+      kb = createKeyboard(window);
+      expect(kb.read().item).toBe(false);
+      down(code);
+      expect(kb.read().item).toBe(true);
+      kb.dispose();
+    }
+  });
+
+  it('reads a tap of the item key shorter than a frame once', () => {
+    kb = createKeyboard(window);
+    down('KeyE');
+    up('KeyE');
+    expect(kb.read().item).toBe(true);
+    expect(kb.read().item).toBe(false);
+  });
+
   it('maps Space to drift', () => {
     kb = createKeyboard(window);
     down('Space');
@@ -61,7 +79,7 @@ describe('keyboard', () => {
     down('ArrowLeft');
     down('Space');
     window.dispatchEvent(new Event('blur'));
-    expect(kb.read()).toEqual({ throttle: 0, brake: 0, steer: 0, drift: false });
+    expect(kb.read()).toEqual({ throttle: 0, brake: 0, steer: 0, drift: false, item: false });
   });
 
   it('clears held keys when the tab hides', () => {

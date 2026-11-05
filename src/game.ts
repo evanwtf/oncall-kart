@@ -1,8 +1,11 @@
 import { createInput, createKeyboard, isDriveKey, type Action } from './input';
+import { botInput } from './logic/bot';
+import type { ItemKind } from './logic/items';
 import { NO_INPUT, spawnKart } from './logic/kart';
 import {
   createRace,
   respawn,
+  standings,
   stepRace,
   type LapCount,
   type Race,
@@ -19,6 +22,8 @@ import { createTouch, loadAutoGas, saveAutoGas } from './touchInput';
 import { createUi, pauseItems, type Screen, type UiState } from './ui/screens';
 
 export const LAP_CHOICES: readonly LapCount[] = [1, 3, 10];
+/** Bot rivals in every race: with the player, 8 karts. */
+const BOTS = 7;
 /**
  * Longest frame the loop catches up on, in fixed steps. Longer than
  * TUNING.maxFrame so a slow machine (software GL at 4-10 fps) still runs the race
@@ -45,6 +50,14 @@ export interface DebugHooks {
   renderInfo(): { calls: number; triangles: number; geometries: number; textures: number };
   /** Gate row positions (s, metres). */
   rowS(): number[];
+  /** Karts in the race. */
+  kartCount(): number;
+  /** The player's race place, 1 to kartCount(). */
+  place(): number;
+  /** Only with ?debug=1: give the player an item (replacing any held item). */
+  giveItem?(item: ItemKind): void;
+  /** Only with ?debug=1: the bot driver drives the player kart, for screenshots and tests. */
+  autopilot?(on: boolean): void;
   /** Only with ?debug=1: put the player at s on the centerline, at rest. */
   placePlayer?(s: number): void;
   /** Only with ?debug=1: give the player a ticket of this type, at this step. */
@@ -65,8 +78,7 @@ function seedFromUrl(): number | null {
 }
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
-  // No item boxes or hazards until they render (phase 2, task 4).
-  const track = buildTrack({ ...HALL, itemBoxRows: [], hazards: [] });
+  const track = buildTrack(HALL);
   const fixedSeed = seedFromUrl();
   const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 2 ** 31);
   const keyboard = createKeyboard(window);
@@ -108,10 +120,11 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   document.addEventListener('dblclick', (e) => e.preventDefault());
   document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
   // The title and setup screens show the hall behind them: a race that never starts.
-  let race: Race = createRace({ laps: 1, seed: newSeed(), driverColor: 0, bots: 0 }, track);
+  let race: Race = createRace({ laps: 1, seed: newSeed(), driverColor: 0, bots: BOTS }, track);
   const scene = createScene(canvas, race, { lowPower: coarse });
   let acc = 0;
   let finishTimer = 0;
+  let autopilot = false;
   let last = performance.now();
 
   const startRace = () => {
@@ -120,7 +133,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         laps: LAP_CHOICES[state.setup.lapIndex] ?? 1,
         seed: newSeed(),
         driverColor: state.setup.colorIndex,
-        bots: 0,
+        bots: BOTS,
       },
       track,
     );
@@ -252,7 +265,11 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       const kartInput = state.screen === 'racing' ? input.read() : NO_INPUT;
       while (acc >= TUNING.step) {
         scene.capture(race);
-        onEvents(stepRace(race, [kartInput], TUNING.step));
+        // The autopilot drives; the item key still works.
+        const auto = autopilot && state.screen === 'racing';
+        const pilot = auto ? botInput(race, race.playerId) : null;
+        const use = pilot ? { ...pilot, item: kartInput.item === true } : kartInput;
+        onEvents(stepRace(race, [use], TUNING.step));
         acc -= TUNING.step;
       }
       if (race.phase === 'finished') {
@@ -262,6 +279,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     }
 
     scene.render(race, state.screen === 'paused' ? 1 : acc / TUNING.step);
+    state.tags = scene.tags();
     ui.render(state);
     requestAnimationFrame(frame);
   };
@@ -288,11 +306,23 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       textures: scene.renderer.info.memory.textures,
     }),
     rowS: () => race.board.map((r) => r.s),
+    kartCount: () => race.karts.length,
+    place: () => (race.finalOrder ?? standings(race)).indexOf(race.playerId) + 1,
   };
   if (new URLSearchParams(window.location.search).get('debug') === '1') {
     window.__oncallKart.setTicket = (type: TicketType, stepIndex: number) => {
       const k = player();
       if (k) k.ticket = { ...k.ticket, type, stepIndex };
+    };
+    window.__oncallKart.autopilot = (on: boolean) => {
+      autopilot = on;
+    };
+    window.__oncallKart.giveItem = (item: ItemKind) => {
+      const k = player();
+      if (k) {
+        k.item = item;
+        k.itemAt = race.time;
+      }
     };
     window.__oncallKart.placePlayer = (s: number) => {
       const k = player();
