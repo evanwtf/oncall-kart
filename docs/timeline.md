@@ -14,3 +14,5 @@ Times are America/New_York, ISO 8601 with offset.
 | 2026-11-04T22:42-05:00 | v0.3.0 live: seven bots, items, hazards, positions. |
 | 2026-11-05T00:09-05:00 | v0.4.0 live: synthesised sound, original music, mute. All three design phases shipped. |
 | 2026-11-05T06:09-05:00 | Work paused at v0.4.0 (Evan). Tagged `v0.4.0`. Open: #2, #5, #6, #7. |
+| 2026-11-05T09:50-05:00 | Shooter work started: Evan asked for a first-person shooter beside the kart game. |
+| 2026-11-05T11:45-05:00 | Shooter design approved. |

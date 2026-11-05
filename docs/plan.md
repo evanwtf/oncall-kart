@@ -28,3 +28,15 @@ The three hazards. Shipped in 0.3.0. Plan:
 Synthesized sound and an original tune. Art polish and a tuning pass.
 Shipped in 0.4.0. Plan:
 [superpowers/plans/2026-11-04-oncall-kart-phase3.md](superpowers/plans/2026-11-04-oncall-kart-phase3.md).
+
+## Shooter ("Zero Down")
+
+A second game on the same site. The design is in
+[superpowers/specs/2026-11-05-oncall-shooter-design.md](superpowers/specs/2026-11-05-oncall-shooter-design.md).
+
+1. **Walk and fix:** the start screen that picks the game, the floor,
+   movement, servers that break, fixing at the rack, patches, the 3-minute
+   shift, the endings and the shift report. Version 0.5.0.
+2. **Vendors and the money gun:** vendor roles, the slowdown, the gun,
+   budget, lures, alarms, the toolkit.
+3. **Sound, touch and polish.**
