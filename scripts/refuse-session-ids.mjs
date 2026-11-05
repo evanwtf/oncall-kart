@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const RULES = [
   ['session-url', /claude\.ai\/code\/session/i],
   ['session-trailer', /^\s*Claude-Session:/im],
-  ['session-id', /\bsession_[A-Za-z0-9]+/],
+  // The shape of a real agent session ID, as the baseline model guard has it.
+  ['session-id', /\bsession_01[A-Za-z0-9]{20,}/],
   ['co-author', /^\s*Co-Authored-By:\s*Claude\b/im],
 ];
 

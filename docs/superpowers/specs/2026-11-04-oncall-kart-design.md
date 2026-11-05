@@ -36,11 +36,11 @@ training tool.
 
 ## Anti-goals
 
-- **No Nintendo IP, and no imitation of a specific game's look.** No names,
-  characters, item designs (no bananas, shells, mushrooms or "?" boxes),
-  track layouts, music, sound effects or logos from any existing kart game.
-  The genre mechanics (laps, drift boost, item boxes, rivals) are fine. The
-  words "Mario" and "Mario Kart" appear nowhere in the repo or the site.
+- **No imitation of a specific game's look.** No names, characters, item
+  designs, track layouts, art, music, sound effects or logos from any
+  existing kart game, in particular Nintendo's. The genre mechanics (laps,
+  drift boost, item boxes, rivals) are fine. The names of those games
+  appear nowhere in the repo or the site.
 - No real company, product or brand names (no vendor names on servers, no
   paging-service or chat-app names).
 - No telemetry, no cookies, no third-party requests at runtime.

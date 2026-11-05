@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- No Nintendo IP: the words "Mario" and "Mario Kart" appear nowhere; no bananas, shells, mushrooms, "?" boxes, copied tracks, music or logos.
+- No names, characters, item designs, art, tracks, music or logos from any existing kart game, in particular Nintendo's. The names of those games appear nowhere.
 - No real company, product or brand names anywhere in the game or repo.
 - No runtime third-party requests: no CDN, no Google Fonts, no analytics. Fonts are system fonts.
 - Public repo: no hostnames, LAN IPs (192.168.x, 172.16-31.x), private DNS suffixes, home-directory paths or 1Password item names in any file or commit.
