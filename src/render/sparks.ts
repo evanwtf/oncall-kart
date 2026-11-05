@@ -23,7 +23,7 @@ export function createSparks(): Sparks {
   geo.setAttribute('position', posAttr);
   geo.setAttribute('color', colAttr);
   const mat = new THREE.PointsMaterial({
-    size: 0.22,
+    size: 0.12,
     vertexColors: true,
     transparent: true,
     depthWrite: false,

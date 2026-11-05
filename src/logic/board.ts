@@ -1,6 +1,7 @@
 import { OPS, type Op } from './ops';
 import { pick, shuffle, type Rng } from './rng';
 import type { Track } from './track';
+import { TUNING } from './tuning';
 
 /** One gate in a row. lateral is the gate center; the gate spans lateral ± halfWidth. */
 export interface GateSlot {
@@ -36,7 +37,7 @@ const LAYOUTS: Readonly<Record<2 | 3, ReadonlyArray<readonly [number, number]>>>
 export function createBoard(rng: Rng, track: Track): Board {
   const hw = track.def.halfWidth;
   const fractions = track.def.gateRowFractions;
-  const counts = fractions.map(() => (rng() < 0.5 ? 2 : 3) as 2 | 3);
+  const counts = fractions.map(() => (rng() < TUNING.twoGateRowShare ? 2 : 3) as 2 | 3);
   // Every op must fit on the board at least once.
   while (counts.reduce((a, b) => a + b, 0) < OPS.length) {
     const i = counts.indexOf(2);

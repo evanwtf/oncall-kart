@@ -12,6 +12,8 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
+    // three.js alone is about 700 kB; one chunk is fine for a static game.
+    chunkSizeWarningLimit: 1000,
   },
   test: {
     include: ['tests/**/*.test.ts'],

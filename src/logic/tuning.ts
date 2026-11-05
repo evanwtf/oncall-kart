@@ -3,12 +3,14 @@ import type { TicketType } from './runbooks';
 /** Every tunable number in the game logic. Units: metres, seconds, radians. */
 export const TUNING = {
   // Tickets. SLA time = slaBase + slaPerStep * number of steps.
-  slaBase: 25,
-  slaPerStep: 14,
+  slaBase: 30,
+  slaPerStep: 15,
+  /** Share of gate rows with 2 gates; the rest have 3. */
+  twoGateRowShare: 0.25,
 
   // Speed, in m/s and m/s².
-  topSpeed: 24,
-  accel: 13,
+  topSpeed: 21,
+  accel: 12,
   brakeDecel: 30,
   coastDecel: 4,
   /** Deceleration toward a lower cap (off-road, pit, slowdown, end of boost). */
@@ -46,12 +48,12 @@ export const TUNING = {
   boostFactor: 1.3,
   boostAccel: 30,
   slowFactor: 0.6,
-  spinDecel: 18,
+  spinDecel: 22,
 
   // Race.
   countdown: 3,
   /** Spin after a wrong gate: the time penalty. */
-  wrongGateSpin: 0.6,
+  wrongGateSpin: 0.9,
   ticketCloseBoost: 1.2,
   /** Time held in the pit while the tech works. */
   pitHold: 2,

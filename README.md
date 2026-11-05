@@ -32,6 +32,11 @@ Safari with WebGL 2.
 | P / Esc   | Pause          |
 | Enter     | Confirm        |
 
+In menus, the arrow keys choose, Enter confirms and Esc goes back. Pick
+1, 3 or 10 laps and a driver on the setup screen. The ticket card (top
+right) shows the runbook: drive through the gate that matches the next
+step. A `PIT` step means the pit lane on the left of the dock straight.
+
 ## Edit the runbooks
 
 The ticket types live in `src/logic/runbooks.ts`. Each type has an id, a

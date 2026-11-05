@@ -14,10 +14,15 @@ import { HALL } from './logic/tracks/hall';
 import { TUNING } from './logic/tuning';
 import { DRIVERS } from './logic/drivers';
 import { createScene } from './render/scene';
-import { createUi, type Screen, type UiState } from './ui/screens';
+import { createUi, PAUSE_LABELS as PAUSE_ITEMS, type Screen, type UiState } from './ui/screens';
 
 export const LAP_CHOICES: readonly LapCount[] = [1, 3, 10];
-export const PAUSE_ITEMS = ['Resume', 'Restart', 'Quit to setup'] as const;
+/**
+ * Longest frame the loop catches up on, in fixed steps. Longer than
+ * TUNING.maxFrame so a slow machine (software GL at 2-5 fps) still runs the race
+ * in real time; each step is still 1/120 s, so nothing tunnels.
+ */
+const MAX_CATCH_UP = 0.5;
 /** Seconds the results wait after the player crosses the line. */
 const FINISH_DELAY = 1.5;
 
@@ -159,7 +164,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   document.addEventListener('visibilitychange', onVisibility);
 
   const frame = (now: number) => {
-    const dt = Math.min(TUNING.maxFrame, Math.max(0, (now - last) / 1000));
+    const dt = Math.min(MAX_CATCH_UP, Math.max(0, (now - last) / 1000));
     last = now;
 
     for (const a of keyboard.takeActions()) handle(a);
