@@ -24,8 +24,8 @@ export default tseslint.config(
     },
   },
   {
-    // src/logic is pure game logic: no three.js, no DOM (see AGENTS.md).
-    files: ['src/logic/**/*.ts'],
+    // src/logic and src/shooter/logic are pure game logic: no three.js, no DOM (see AGENTS.md).
+    files: ['src/logic/**/*.ts', 'src/shooter/logic/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: ['three', 'three/*'] }],
       'no-restricted-globals': [
