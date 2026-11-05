@@ -59,6 +59,8 @@ export function createKeyboard(target: Window): Keyboard {
     held.add(e.code);
     if (e.repeat) return;
     if (ITEM.includes(e.code)) itemTap = true;
+    // A browser or system shortcut (Cmd+M, Ctrl+R, Alt+P) is not a game action.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const action = ACTIONS[e.code];
     if (action) queue.push(action);
   };

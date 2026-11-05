@@ -109,6 +109,19 @@ describe('keyboard', () => {
     expect(kb.takeActions()).toEqual(['pause', 'pause', 'respawn', 'mute']);
   });
 
+  it('ignores actions with Cmd, Ctrl or Alt held (browser shortcuts)', () => {
+    kb = createKeyboard(window);
+    for (const mod of ['metaKey', 'ctrlKey', 'altKey']) {
+      for (const code of ['KeyM', 'KeyR', 'KeyP', 'Enter']) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { code, [mod]: true, bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { code, [mod]: true, bubbles: true }));
+      }
+    }
+    expect(kb.takeActions()).toEqual([]);
+    down('KeyM');
+    expect(kb.takeActions()).toEqual(['mute']);
+  });
+
   it('queues menu directions', () => {
     kb = createKeyboard(window);
     down('ArrowUp');
