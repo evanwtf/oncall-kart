@@ -56,6 +56,7 @@ Mouse clicks work the same way.
 The sound starts on your first key press or tap: browsers block sound
 before one. M, or Sound in the pause menu, turns it off and on. The game
 remembers the choice, and shows a muted-speaker mark while the sound is off.
+On an iPhone or an iPad, the ring/silent switch also mutes the game.
 
 In menus, the arrow keys choose, Enter confirms and Esc goes back. Pick
 1, 3 or 10 laps and a driver on the setup screen. The ticket card (top

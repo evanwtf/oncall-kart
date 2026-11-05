@@ -15,6 +15,11 @@ export interface Audio {
   setMusic(state: MusicState): void;
   /** A pause ducks the music and stops the engine. */
   setPaused(p: boolean): void;
+  /**
+   * A hidden tab suspends the context: no sound and no work. Visible again,
+   * it resumes; if the browser refuses, the next gesture resumes it.
+   */
+  setHidden(h: boolean): void;
   setMuted(m: boolean): void;
   muted(): boolean;
   state(): AudioState;
@@ -109,6 +114,7 @@ const NOOP: Audio = {
   setEngine() {},
   setMusic() {},
   setPaused() {},
+  setHidden() {},
   setMuted() {},
   muted: () => false,
   state: () => 'unsupported',
@@ -130,6 +136,7 @@ export function createAudio(factory: () => AudioContext | null = defaultFactory)
   let engine: EngineSound | null = null;
   let muted = false;
   let paused = false;
+  let hidden = false;
   let music: MusicState = 'off';
   let live = 0;
 
@@ -158,17 +165,20 @@ export function createAudio(factory: () => AudioContext | null = defaultFactory)
       },
     };
     synth = s;
-    // iOS: a silent buffer started inside the gesture unlocks output for good.
-    const blank = c.createBufferSource();
-    blank.buffer = c.createBuffer(1, 1, c.sampleRate);
-    blank.connect(g.sfx);
-    blank.start(0);
-    blank.stop(c.currentTime + 0.01);
-    s.track(blank, [blank]);
     engine = createEngineSound(c, g.sfx);
     seq = createSequencer({ synth: s, out: g.music, running, silent: () => muted });
     if (paused) setNow(g.music.gain, MUSIC_GAIN * DUCK, c.currentTime);
     applyMusic();
+  };
+
+  /** Resume a suspended context. Safari reports 'interrupted' after an app switch or a call. */
+  const resume = () => {
+    const st = ctx?.state as string | undefined;
+    if (st === 'suspended' || st === 'interrupted') {
+      ctx?.resume().catch(() => {
+        // A resume outside a gesture can fail; the next gesture tries again.
+      });
+    }
   };
 
   const audio: Audio = {
@@ -192,13 +202,7 @@ export function createAudio(factory: () => AudioContext | null = defaultFactory)
           return;
         }
       }
-      // Safari reports 'interrupted' after an app switch or a call.
-      const st = ctx.state as string;
-      if (st === 'suspended' || st === 'interrupted') {
-        ctx.resume().catch(() => {
-          // A resume outside a gesture fails; the next gesture tries again.
-        });
-      }
+      if (!hidden) resume();
     },
     play(cues) {
       if (!ctx || !graph || !synth || muted || !running() || cues.length === 0) return;
@@ -206,6 +210,8 @@ export function createAudio(factory: () => AudioContext | null = defaultFactory)
       for (const c of cues) playCue(synth, graph.sfx, c, t);
     },
     setEngine(speed, onRoad) {
+      // A stopped clock would pile up automation events for no sound.
+      if (!running()) return;
       engine?.set(speed, onRoad);
     },
     setMusic(state) {
@@ -222,6 +228,20 @@ export function createAudio(factory: () => AudioContext | null = defaultFactory)
         graph.music.gain.setTargetAtTime(MUSIC_GAIN * (p ? DUCK : 1), t, 0.08);
       }
       engine?.setOn(engineOn());
+    },
+    setHidden(h) {
+      if (h === hidden) return;
+      hidden = h;
+      if (!ctx) return;
+      if (h) {
+        if (ctx.state === 'running') {
+          ctx.suspend().catch(() => {
+            // Nothing to do: a context that will not suspend keeps playing ducked.
+          });
+        }
+      } else {
+        resume();
+      }
     },
     setMuted(m) {
       muted = m;

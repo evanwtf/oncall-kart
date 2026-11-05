@@ -90,6 +90,61 @@ export function noise(s: Synth, out: AudioNode, spec: NoiseSpec): void {
 /** Hz of a MIDI note number. */
 export const hz = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
 
+/** A note of a jingle: MIDI number, start and length in seconds. */
+export interface JingleNote {
+  midi: number;
+  at: number;
+  dur: number;
+}
+
+/**
+ * Gate passed: a dyad struck at once, D6 over A5 (a fourth). The top note
+ * bends up a semitone into pitch. No second note follows.
+ */
+export const GATE_OK: ReadonlyArray<{
+  midi: number;
+  dur: number;
+  level: number;
+  type: OscillatorType;
+  bend?: number;
+}> = [
+  { midi: 86, dur: 0.16, level: 0.7, type: 'triangle', bend: 1 },
+  { midi: 81, dur: 0.16, level: 0.45, type: 'sine' },
+];
+
+/**
+ * Lap: three even notes. A5 and C#6 (a major third), then F#6, a sixth above
+ * the first. The last rings longer.
+ */
+export const LAP: readonly JingleNote[] = [
+  { midi: 81, at: 0, dur: 0.12 },
+  { midi: 85, at: 0.1, dur: 0.12 },
+  { midi: 90, at: 0.2, dur: 0.4 },
+];
+
+/**
+ * Final lap: the opening motif of the tune (A D F E), an octave up and
+ * twice as fast, coming home to D.
+ */
+export const FINAL_LAP: readonly JingleNote[] = [
+  { midi: 81, at: 0, dur: 0.13 },
+  { midi: 86, at: 0.14, dur: 0.06 },
+  { midi: 89, at: 0.21, dur: 0.06 },
+  { midi: 88, at: 0.28, dur: 0.13 },
+  { midi: 86, at: 0.42, dur: 0.5 },
+];
+
+function playNotes(
+  s: Synth,
+  out: AudioNode,
+  notes: readonly JingleNote[],
+  t: number,
+  type: OscillatorType,
+  peak: number,
+): void {
+  for (const n of notes) tone(s, out, { type, f0: hz(n.midi), t: t + n.at, dur: n.dur, peak });
+}
+
 const P = SFX_PEAK;
 
 /** Play one cue at time t into out. */
@@ -103,8 +158,17 @@ export function playCue(s: Synth, out: AudioNode, cue: Cue, t: number): void {
       tone(s, out, { type: 'triangle', f0: hz(69), t, dur: 0.4, peak: P * 0.5 });
       break;
     case 'gate-ok':
-      tone(s, out, { type: 'triangle', f0: hz(84), t, dur: 0.09, peak: P * 0.8 });
-      tone(s, out, { type: 'triangle', f0: hz(91), t: t + 0.07, dur: 0.18, peak: P * 0.8 });
+      // One struck dyad, no leap: D6 that bends up into tune over A5.
+      for (const n of GATE_OK) {
+        tone(s, out, {
+          type: n.type,
+          f0: hz(n.midi - (n.bend ?? 0)),
+          f1: hz(n.midi),
+          t,
+          dur: n.dur,
+          peak: P * n.level,
+        });
+      }
       break;
     case 'gate-wrong':
       tone(s, out, { type: 'sawtooth', f0: 98, f1: 82, t, dur: 0.32, peak: P * 0.45 });
@@ -128,32 +192,19 @@ export function playCue(s: Synth, out: AudioNode, cue: Cue, t: number): void {
         noise(s, out, {
           t: t + i * 0.05,
           dur: 0.025,
-          peak: P * 0.45,
+          peak: P * 0.3,
           filter: 'highpass',
           f0: 2500 + i * 300,
         });
       }
       break;
     case 'lap':
-      tone(s, out, { type: 'triangle', f0: hz(88), t, dur: 0.5, peak: P * 0.6 });
-      tone(s, out, { type: 'triangle', f0: hz(93), t: t + 0.09, dur: 0.6, peak: P * 0.5 });
+      playNotes(s, out, LAP, t, 'triangle', P * 0.55);
       break;
     case 'final-lap':
-      // A short call: low, low, up a fourth, up a sixth, held.
-      [
-        [69, 0, 0.1],
-        [69, 0.12, 0.1],
-        [74, 0.24, 0.1],
-        [78, 0.36, 0.45],
-      ].forEach(([m, dt, d]) =>
-        tone(s, out, {
-          type: 'square',
-          f0: hz(m as number),
-          t: t + (dt as number),
-          dur: d as number,
-          peak: P * 0.45,
-        }),
-      );
+      playNotes(s, out, FINAL_LAP, t, 'square', P * 0.45);
+      // A low D under the last note: the tune's home chord.
+      tone(s, out, { type: 'triangle', f0: hz(62), t: t + 0.42, dur: 0.5, peak: P * 0.5 });
       break;
     case 'finish': {
       // More notes for a better place. A place in the back half ends on a minor third.

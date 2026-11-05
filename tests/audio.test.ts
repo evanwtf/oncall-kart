@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCueState, cuesFor, type Cue } from '../src/audio/cues';
-import { createAudio, MUSIC_GAIN } from '../src/audio/engine';
+import { createAudio, MASTER_GAIN, MUSIC_GAIN } from '../src/audio/engine';
+import { FINAL_LAP, GATE_OK, LAP } from '../src/audio/sfx';
 import { BASS, DRUMS, LEAD, LOOP_STEPS, parseDrums, parseVoice, TEMPO } from '../src/audio/music';
 import { botInput } from '../src/logic/bot';
 import { ITEM_KINDS } from '../src/logic/items';
 import { createRace, stepRace } from '../src/logic/race';
 import { buildTrack } from '../src/logic/track';
 import { HALL } from '../src/logic/tracks/hall';
+
+/** Automation calls on every fake param: setTargetAtTime and the ramps. */
+let automations = 0;
 
 /** A fake AudioParam: it keeps the last value set by any method. */
 class FakeParam {
@@ -19,14 +23,17 @@ class FakeParam {
     return this;
   }
   linearRampToValueAtTime(v: number) {
+    automations++;
     this.value = v;
     return this;
   }
   exponentialRampToValueAtTime(v: number) {
+    automations++;
     this.value = v;
     return this;
   }
   setTargetAtTime(v: number) {
+    automations++;
     this.value = v;
     return this;
   }
@@ -38,18 +45,22 @@ class FakeParam {
 /** A fake node. It counts itself live while it has a connection. */
 class FakeNode {
   connected = false;
+  /** Where this node sends its output. */
+  dests: FakeNode[] = [];
   constructor(protected ctx: FakeContext) {
     ctx.created++;
   }
   connect(dest: FakeNode) {
     if (!this.connected) this.ctx.live++;
     this.connected = true;
+    this.dests.push(dest);
     this.ctx.connects++;
     return dest;
   }
   disconnect() {
     if (this.connected) this.ctx.live--;
     this.connected = false;
+    this.dests = [];
     this.ctx.disconnects++;
   }
 }
@@ -99,13 +110,21 @@ class FakeContext {
   disconnects = 0;
   live = 0;
   resumes = 0;
+  suspends = 0;
+  /** true: resume() leaves the context suspended, as outside a gesture. */
+  refuseResume = false;
   sources = new Set<FakeSource>();
   constructor() {
     this.destination = new FakeNode(this);
   }
   resume() {
     this.resumes++;
-    this.state = 'running';
+    if (!this.refuseResume) this.state = 'running';
+    return Promise.resolve();
+  }
+  suspend() {
+    this.suspends++;
+    this.state = 'suspended';
     return Promise.resolve();
   }
   close() {
@@ -233,10 +252,14 @@ describe('createAudio', () => {
     const { ctx, audio } = fakeAudio();
     audio.unlock();
     audio.play(ALL_CUES);
+    // The master gain is the one gain that feeds the output.
+    const masters = ctx.gains.filter((g) => g.dests.includes(ctx.destination));
+    expect(masters).toHaveLength(1);
+    const master = masters[0] as FakeGain;
+    expect(master.gain.value).toBe(MASTER_GAIN);
     audio.setMuted(true);
     expect(audio.muted()).toBe(true);
-    // The master gain is the last gain of the graph built at unlock.
-    expect(ctx.gains.some((g) => g.gain.value === 0)).toBe(true);
+    expect(master.gain.value).toBe(0);
     ctx.advance(5);
     const before = ctx.created;
     audio.play(ALL_CUES);
@@ -247,6 +270,44 @@ describe('createAudio', () => {
     expect(ctx.created).toBe(before);
     audio.setMuted(false);
     expect(audio.muted()).toBe(false);
+    expect(master.gain.value).toBe(MASTER_GAIN);
+  });
+
+  it('schedules no engine automation while the context is suspended', () => {
+    const { ctx, audio } = fakeAudio();
+    ctx.refuseResume = true;
+    audio.unlock();
+    audio.setMusic('race');
+    expect(audio.state()).toBe('suspended');
+    const before = automations;
+    for (let i = 0; i < 100; i++) audio.setEngine(i % 40, i % 2 === 0);
+    expect(automations).toBe(before);
+    ctx.refuseResume = false;
+    audio.unlock();
+    audio.setEngine(20, true);
+    expect(automations).toBeGreaterThan(before);
+  });
+
+  it('suspends the context in a hidden tab and resumes it when visible', () => {
+    const { ctx, audio } = fakeAudio();
+    audio.unlock();
+    expect(audio.state()).toBe('running');
+    audio.setHidden(true);
+    expect(ctx.suspends).toBe(1);
+    expect(audio.state()).toBe('suspended');
+    // A gesture while hidden (a key in another window) does not resume it.
+    audio.unlock();
+    expect(audio.state()).toBe('suspended');
+    audio.setHidden(false);
+    expect(audio.state()).toBe('running');
+    // The browser refused the resume: the next gesture resumes it.
+    audio.setHidden(true);
+    ctx.refuseResume = true;
+    audio.setHidden(false);
+    expect(audio.state()).toBe('suspended');
+    ctx.refuseResume = false;
+    audio.unlock();
+    expect(audio.state()).toBe('running');
   });
 
   it('keeps the mute across an unlock that happens later', () => {
@@ -270,6 +331,7 @@ describe('createAudio', () => {
         audio.setMusic('race');
         audio.setEngine(10, true);
         audio.setPaused(true);
+        audio.setHidden(true);
         audio.setMuted(true);
         audio.dispose();
       }).not.toThrow();
@@ -318,6 +380,24 @@ describe('createAudio', () => {
     expect(audio.liveNodes()).toBe(0);
     console.info(`10-lap race: ${frames} frames, ${cues} cues, max live one-shot nodes ${max}`);
   }, 60_000);
+});
+
+describe('the jingles', () => {
+  it("opens the final-lap call with the tune's first four notes, an octave up", () => {
+    const tune = parseVoice(LEAD)
+      .notes.slice(0, 4)
+      .map((n) => n.midi + 12);
+    expect(FINAL_LAP.slice(0, 4).map((n) => n.midi)).toEqual(tune);
+    // It comes home to D.
+    expect((FINAL_LAP.at(-1)?.midi ?? 0) % 12).toBe(2);
+  });
+
+  it('has no two-note rising leap: gate-ok is one dyad, the lap has three notes', () => {
+    expect(GATE_OK).toHaveLength(2);
+    expect(LAP).toHaveLength(3);
+    const steps = LAP.slice(1).map((n, i) => n.midi - (LAP[i]?.midi ?? 0));
+    expect(steps).toEqual([4, 5]);
+  });
 });
 
 describe('the tune', () => {

@@ -116,10 +116,19 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   const audio = createAudio();
   audio.setMuted(state.muted);
   let cueState = createCueState();
+  // Only events that browsers count as user activation: a touch pointerdown
+  // is not one, and Chrome warns about a context started there.
   const unlock = () => audio.unlock();
-  for (const type of ['pointerdown', 'touchend', 'click', 'keydown']) {
+  for (const type of ['touchend', 'click', 'keydown']) {
     window.addEventListener(type, unlock, true);
   }
+  window.addEventListener(
+    'pointerdown',
+    (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') unlock();
+    },
+    true,
+  );
   const toggleMute = () => {
     state.muted = !state.muted;
     audio.setMuted(state.muted);
@@ -292,6 +301,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   const onVisibility = () => {
     if (hidden()) autoPause();
     syncPause();
+    // A hidden tab makes no sound and does no audio work.
+    audio.setHidden(hidden());
   };
   document.addEventListener('visibilitychange', onVisibility);
   // A window that loses focus gets no key events: pause rather than coast.
