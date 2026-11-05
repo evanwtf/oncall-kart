@@ -3,7 +3,7 @@ import { DRIVERS } from '../src/logic/drivers';
 import { createRace, type RaceEvent } from '../src/logic/race';
 import { buildTrack } from '../src/logic/track';
 import { HALL } from '../src/logic/tracks/hall';
-import { formatTime, hitToast, ordinal } from '../src/ui/hud';
+import { formatTime, hitToast, MAX_TAGS, ordinal, pickTags, TAG_TRACK_RANGE } from '../src/ui/hud';
 import { shiftCaption } from '../src/ui/screens';
 
 describe('hud', () => {
@@ -54,4 +54,53 @@ describe('hud place and toasts', () => {
     expect(hit({ kartId: 2 })).toBeUndefined();
     expect(hit({ kartId: 3, byId: 0 })).toBe(`YOU PAGED ${by}`);
   });
+});
+
+describe('name tags', () => {
+  const track = buildTrack(HALL);
+  const size = () => ({ w: 80, h: 16 });
+  const racing = () => {
+    const r = createRace({ laps: 1, seed: 1, driverColor: 0, bots: 7 }, track);
+    r.phase = 'racing';
+    r.time = 5;
+    return r;
+  };
+  /** Every kart on screen, spread out, at distance 10 + id. */
+  const spread = (r: ReturnType<typeof racing>) =>
+    r.karts.map((k) => ({ x: 100 + k.id * 120, y: 300, dist: 10 + k.id }));
+
+  it('shows none in the countdown or the first second', () => {
+    const r = racing();
+    r.phase = 'countdown';
+    expect(pickTags(r, spread(r), size)).toEqual([]);
+    r.phase = 'racing';
+    r.time = 0.5;
+    expect(pickTags(r, spread(r), size)).toEqual([]);
+  });
+
+  it('shows at most 3, the nearest, never the player', () => {
+    const r = racing();
+    expect(pickTags(r, spread(r), size).map((t) => t.id)).toEqual([1, 2, 3]);
+  });
+
+  it('skips a tag that overlaps a nearer one', () => {
+    const r = racing();
+    const tags = spread(r);
+    // Kart 2's tag sits on kart 1's.
+    tags[2] = { x: 220 + 20, y: 305, dist: 12 };
+    tags[1] = { x: 220, y: 300, dist: 11 };
+    expect(pickTags(r, tags, size).map((t) => t.id)).toEqual([1, 3, 4]);
+  });
+
+  it('drops karts more than TAG_TRACK_RANGE m away along the track', () => {
+    const r = racing();
+    const far = r.karts[1];
+    if (!far) throw new Error('kart');
+    far.proj = { s: (r.karts[0]?.proj.s ?? 0) + TAG_TRACK_RANGE + 5, lateral: 0 };
+    expect(pickTags(r, spread(r), size).map((t) => t.id)).toEqual([2, 3, 4]);
+  });
+});
+
+describe('MAX_TAGS', () => {
+  it('is 3', () => expect(MAX_TAGS).toBe(3));
 });

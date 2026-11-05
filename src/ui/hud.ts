@@ -3,7 +3,7 @@ import type { ItemKind } from '../logic/items';
 import { STEP_COLORS } from '../logic/ops';
 import { standings, type Race, type RaceEvent } from '../logic/race';
 import { nextStep } from '../logic/ticket';
-import type { Track } from '../logic/track';
+import { forwardDelta, type Track } from '../logic/track';
 
 /** 1st, 2nd, 3rd, 4th ... */
 export function ordinal(n: number): string {
@@ -58,6 +58,52 @@ export function hitToast(
 
 /** A tag above a kart: its screen position and distance, or null when off screen. */
 export type TagPos = { x: number; y: number; dist: number } | null;
+
+/** Tags shown at most, nearest first. */
+export const MAX_TAGS = 3;
+/** Only karts this close along the track (m) get a tag: none across the hall. */
+export const TAG_TRACK_RANGE = 40;
+
+/**
+ * The name tags to show: none in the countdown or the first second (the GO
+ * text owns the middle); only rivals near the player along the track; the
+ * nearest MAX_TAGS first; and none whose box overlaps a nearer tag. size(id)
+ * gives a tag's width and height in px. The tag's box is centered on x and
+ * ends at y.
+ */
+export function pickTags(
+  race: Race,
+  tags: readonly TagPos[],
+  size: (id: number) => { w: number; h: number },
+): Array<{ id: number; x: number; y: number; alpha: number }> {
+  if (race.phase === 'countdown' || race.time < 1) return [];
+  const me = race.karts[race.playerId];
+  if (!me) return [];
+  const L = race.track.length;
+  const near = race.karts
+    .map((k) => ({ k, p: tags[k.id] }))
+    .filter(
+      ({ k, p }) =>
+        p != null &&
+        k.id !== race.playerId &&
+        Math.abs(forwardDelta(me.proj.s, k.proj.s, L)) < TAG_TRACK_RANGE,
+    )
+    .sort((a, b) => (a.p?.dist ?? 0) - (b.p?.dist ?? 0));
+  const placed: Array<{ id: number; x: number; y: number; alpha: number; w: number; h: number }> =
+    [];
+  for (const { k, p } of near) {
+    if (!p || placed.length >= MAX_TAGS) break;
+    const { w, h } = size(k.id);
+    const hits = placed.some(
+      (o) => Math.abs(o.x - p.x) < (o.w + w) / 2 && Math.abs(o.y - p.y) < (o.h + h) / 2,
+    );
+    if (hits) continue;
+    // Fade out between 25 m and 60 m from the camera.
+    const alpha = Math.max(0, Math.min(1, (60 - p.dist) / 35));
+    if (alpha > 0) placed.push({ id: k.id, x: p.x, y: p.y, alpha, w, h });
+  }
+  return placed.map(({ id, x, y, alpha }) => ({ id, x, y, alpha }));
+}
 
 /** Draws the track outline once, then the karts as dots each frame. */
 function createMinimap(canvas: HTMLCanvasElement) {
@@ -140,6 +186,8 @@ export function formatTime(seconds: number): string {
 }
 
 const TOAST_SECONDS = 1.6;
+/** Seconds a new race place must hold before the HUD shows it. */
+export const PLACE_HOLD = 0.3;
 
 export interface Hud {
   el: HTMLElement;
@@ -191,6 +239,7 @@ export function createHud(root: HTMLElement): Hud {
   const drawMap = createMinimap(mapEl);
   const tagLayer = div('tags', el);
   let tagEls: HTMLElement[] = [];
+  let tagSizes: Array<{ w: number; h: number }> = [];
   let lastPlace = 0;
 
   const speed = div('hud-speed', el);
@@ -208,28 +257,44 @@ export function createHud(root: HTMLElement): Hud {
   const updateTags = (race: Race, tags: readonly TagPos[]) => {
     if (tagEls.length !== race.karts.length) {
       for (const t of tagEls) t.remove();
+      tagSizes = [];
       tagEls = race.karts.map((k) => {
         const t = div('tag', tagLayer);
         t.textContent = DRIVERS[k.driverIndex]?.name ?? '';
         t.style.borderColor = `#${(DRIVERS[k.driverIndex]?.color ?? 0xffffff).toString(16).padStart(6, '0')}`;
+        t.style.display = 'none';
         return t;
       });
     }
-    race.karts.forEach((k, i) => {
-      const t = tagEls[i];
-      if (!t) return;
-      const p = tags[i];
-      // The player has no tag; others fade out between 25 m and 60 m.
-      const alpha = !p || k.id === race.playerId ? 0 : Math.max(0, Math.min(1, (60 - p.dist) / 35));
-      if (alpha === 0 || !p) {
-        t.style.display = 'none';
-        return;
-      }
+    // Each tag's size, measured once: on its first frame on screen.
+    const size = (id: number) => {
+      const known = tagSizes[id];
+      if (known) return known;
+      const t = tagEls[id];
+      if (!t) return { w: 0, h: 0 };
       t.style.display = '';
-      t.style.opacity = alpha.toFixed(2);
-      t.style.transform = `translate(${p.x.toFixed(0)}px, ${p.y.toFixed(0)}px) translate(-50%, -100%)`;
+      const measured = { w: t.offsetWidth, h: t.offsetHeight };
+      t.style.display = 'none';
+      if (measured.w > 0) tagSizes[id] = measured;
+      return measured;
+    };
+    const shown = pickTags(race, tags, size);
+    const on = new Set(shown.map((x) => x.id));
+    tagEls.forEach((t, i) => {
+      if (!on.has(i)) t.style.display = 'none';
     });
+    for (const x of shown) {
+      const t = tagEls[x.id];
+      if (!t) continue;
+      t.style.display = '';
+      t.style.opacity = x.alpha.toFixed(2);
+      t.style.transform = `translate(${x.x.toFixed(0)}px, ${x.y.toFixed(0)}px) translate(-50%, -100%)`;
+    }
   };
+
+  /** Shown place, and the place that must hold PLACE_HOLD s before it shows. */
+  let pendingPlace = 0;
+  let pendingSince = 0;
 
   return {
     el,
@@ -237,7 +302,16 @@ export function createHud(root: HTMLElement): Hud {
       const k = race.karts[race.playerId];
       if (!k) return;
       const order = race.finalOrder ?? standings(race);
-      const myPlace = order.indexOf(k.id) + 1;
+      const live = order.indexOf(k.id) + 1;
+      // Hysteresis: a place shows once it has held PLACE_HOLD s, so two karts
+      // side by side do not flicker the panel. The frozen results show at once.
+      if (live !== pendingPlace) {
+        pendingPlace = live;
+        pendingSince = race.time;
+      }
+      const settled =
+        lastPlace === 0 || race.finalOrder !== null || race.time - pendingSince >= PLACE_HOLD;
+      const myPlace = settled ? pendingPlace : lastPlace;
       setText(placeNum, ordinal(myPlace));
       setText(placeOf, `/ ${race.karts.length}`);
       if (myPlace !== lastPlace) {
@@ -339,6 +413,8 @@ export function createHud(root: HTMLElement): Hud {
       toastList = [];
       stepsKey = '';
       lastPlace = 0;
+      pendingPlace = 0;
+      pendingSince = 0;
       place.classList.remove('up', 'down');
       for (const t of tagEls) t.remove();
       tagEls = [];

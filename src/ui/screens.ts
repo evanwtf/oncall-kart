@@ -237,6 +237,8 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
       if (race !== lastRace) {
         hud.clear();
         lastRace = race;
+        // A new race draws its own finishing order, even one equal to the last.
+        orderKey = '';
       }
       root.dataset.screen = state.screen;
 

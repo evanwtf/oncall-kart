@@ -140,6 +140,7 @@ export function createScene(
       if (wheelSpin.length !== r.karts.length) syncKarts();
 
       let player: Pose | null = null;
+      const poses: Pose[] = [];
       r.karts.forEach((k, i) => {
         const p = prev[i] ?? { x: k.kart.pos.x, z: k.kart.pos.z, heading: k.kart.heading };
         const pose = {
@@ -160,6 +161,7 @@ export function createScene(
           wheelSpin: wheelSpin[i] ?? 0,
           shield: k.shieldTime > 0,
         });
+        poses[i] = pose;
         if (i === r.playerId) player = pose;
       });
       fleet.commit();
@@ -191,8 +193,10 @@ export function createScene(
       // Name tags: project a point above each kart to the canvas.
       const w = canvas.clientWidth;
       const hgt = canvas.clientHeight;
-      tagPos = r.karts.map((k) => {
-        v3.set(k.kart.pos.x, 2.1, k.kart.pos.z);
+      // The interpolated pose, as drawn: the raw logic position jitters.
+      tagPos = r.karts.map((k, i) => {
+        const pose = poses[i] ?? { x: k.kart.pos.x, z: k.kart.pos.z };
+        v3.set(pose.x, 2.1, pose.z);
         const dist = v3.distanceTo(chase.camera.position);
         v3.project(chase.camera);
         if (v3.z > 1 || v3.z < -1) return null;

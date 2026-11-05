@@ -163,7 +163,8 @@ export function buildProps(track: Track, race: Race): PropsHandle {
     return x;
   };
   const instanced = (geo: THREE.BufferGeometry, mat: THREE.Material, n: number) => {
-    const m = new THREE.InstancedMesh(keep(geo), keep(mat), n);
+    // keep() also frees the instance-matrix buffers when the props go.
+    const m = keep(new THREE.InstancedMesh(keep(geo), keep(mat), n));
     m.frustumCulled = false;
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.count = 0;
@@ -220,10 +221,12 @@ export function buildProps(track: Track, race: Race): PropsHandle {
   const clockTex = keep(clockTexture());
   const sideMat = keep(new THREE.MeshStandardMaterial({ color: 0xc8432f, roughness: 0.5 }));
   const faceMat = keep(new THREE.MeshStandardMaterial({ map: clockTex, roughness: 0.5 }));
-  const barrels = new THREE.InstancedMesh(
-    keep(barrelGeo),
-    [sideMat, faceMat, faceMat],
-    Math.max(1, crons.length),
+  const barrels = keep(
+    new THREE.InstancedMesh(
+      keep(barrelGeo),
+      [sideMat, faceMat, faceMat],
+      Math.max(1, crons.length),
+    ),
   );
   barrels.frustumCulled = false;
   barrels.count = crons.length;
@@ -355,7 +358,6 @@ export function buildProps(track: Track, race: Race): PropsHandle {
     },
     dispose() {
       for (const d of disposables) d.dispose();
-      barrels.dispose();
       group.clear();
     },
   };

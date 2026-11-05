@@ -125,6 +125,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   let acc = 0;
   let finishTimer = 0;
   let autopilot = false;
+  let itemTap = false;
   let last = performance.now();
 
   const startRace = () => {
@@ -143,6 +144,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     state.pauseIndex = 0;
     acc = 0;
     finishTimer = 0;
+    itemTap = false;
   };
 
   /** The screen a pause returns to. */
@@ -262,15 +264,20 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
 
     if (state.screen === 'countdown' || state.screen === 'racing') {
       acc += dt;
-      const kartInput = state.screen === 'racing' ? input.read() : NO_INPUT;
+      const read = state.screen === 'racing' ? input.read() : NO_INPUT;
+      // A short item tap waits for the next substep: a frame shorter than one
+      // step runs none, and the tap must not be lost.
+      itemTap ||= read.item === true;
+      const kartInput = { ...read, item: itemTap };
       while (acc >= TUNING.step) {
         scene.capture(race);
         // The autopilot drives; the item key still works.
         const auto = autopilot && state.screen === 'racing';
         const pilot = auto ? botInput(race, race.playerId) : null;
-        const use = pilot ? { ...pilot, item: kartInput.item === true } : kartInput;
+        const use = pilot ? { ...pilot, item: kartInput.item } : kartInput;
         onEvents(stepRace(race, [use], TUNING.step));
         acc -= TUNING.step;
+        itemTap = false;
       }
       if (race.phase === 'finished') {
         finishTimer += dt;

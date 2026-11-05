@@ -273,6 +273,8 @@ body {
   font-weight: 900;
   color: var(--amber);
   text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  /* Above the HUD and its name tags. */
+  z-index: 1;
 }
 
 .hud {
