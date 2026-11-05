@@ -60,4 +60,18 @@ export const HALL: TrackDef = {
     exitLen: 20,
   },
   gridS: 12,
+  // On the wide right turn, after the second hairpin, and at the end of the
+  // last corner onto the straight.
+  itemBoxRows: [195, 515, 745],
+  hazards: [
+    // Cable spaghetti: one lane of the sweeper, and one of the back aisle.
+    { kind: 'cable', s: 266, lateral: -4, length: 8, width: 5 },
+    { kind: 'cable', s: 536, lateral: 4, length: 8, width: 5 },
+    // Change-freeze ice through the first and the last hairpin.
+    { kind: 'ice', s: 366, lateral: 0, length: 28, width: 18 },
+    { kind: 'ice', s: 680, lateral: 0, length: 30, width: 18 },
+    // Rogue cron jobs: between the hairpins, and in the back aisle.
+    { kind: 'cron', s: 420, lateral: 0, length: 1.6, width: 18, phase: 0.5 },
+    { kind: 'cron', s: 602, lateral: 0, length: 1.6, width: 18, phase: 0 },
+  ],
 };

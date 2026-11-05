@@ -1,3 +1,4 @@
+import { inPatch } from './hazards';
 import type { Projection, Track } from './track';
 import { TUNING } from './tuning';
 import type { Vec2 } from './vec';
@@ -8,6 +9,8 @@ export interface KartInput {
   brake: number;
   steer: number;
   drift: boolean;
+  /** Use the held item. It acts on the press, not while held. */
+  item?: boolean;
 }
 
 export const NO_INPUT: KartInput = { throttle: 0, brake: 0, steer: 0, drift: false };
@@ -32,7 +35,8 @@ export interface KartState {
   slowTime: number;
 }
 
-export type Surface = 'road' | 'offroad' | 'pit';
+/** 'ice': road with low grip (a change-freeze zone). */
+export type Surface = 'road' | 'offroad' | 'pit' | 'ice';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -159,6 +163,8 @@ export function stepKart(
   } else {
     yaw = steer * TUNING.turnRate * steerScale;
   }
+  const ice = surface === 'ice';
+  if (ice) yaw *= TUNING.iceGrip;
   heading += yaw * dt;
 
   // Position.
@@ -166,12 +172,16 @@ export function stepKart(
   const fz = Math.cos(heading);
   let x = k.pos.x + fx * speed * dt;
   let z = k.pos.z + fz * speed * dt;
+  let slide = 0;
   if (driftDir !== 0) {
     // Slide out of the turn: to the right in a left drift.
-    const slide = -driftDir * TUNING.driftSlide * speed * dt;
-    x += fz * slide;
-    z += -fx * slide;
+    slide = -driftDir * TUNING.driftSlide * speed * dt * (ice ? TUNING.iceSlide : 1);
+  } else if (ice) {
+    // On ice the kart also slides wide in a plain turn.
+    slide = (-yaw / TUNING.turnRate) * TUNING.iceSlip * speed * dt;
   }
+  x += fz * slide;
+  z += -fx * slide;
 
   return {
     pos: { x, z },
@@ -199,7 +209,9 @@ export function surfaceAt(p: Projection, track: Track): Surface {
   ) {
     return 'pit';
   }
-  return Math.abs(p.lateral) <= halfWidth ? 'road' : 'offroad';
+  if (Math.abs(p.lateral) > halfWidth) return 'offroad';
+  const ice = track.def.hazards?.some((h) => h.kind === 'ice' && inPatch(h, p, track.length));
+  return ice ? 'ice' : 'road';
 }
 
 /** Keep the kart inside the walls. A wall hit pushes the kart back and costs speed. */

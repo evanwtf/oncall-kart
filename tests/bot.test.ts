@@ -177,6 +177,25 @@ describe('bots and the pit (Review Focus 4)', () => {
   });
 });
 
+describe('bots and hazards', () => {
+  it('a bot steers round a cable patch in its home lane', () => {
+    const r = botRace(3, 4);
+    runBots(r, 0.1);
+    // Bot 3's home lane is 0.3 road half-widths right: inside the first patch.
+    const bot = r.karts[3];
+    const cable = (HALL.hazards ?? []).find((h) => h.kind === 'cable');
+    if (!bot || !cable) throw new Error('setup');
+    for (const k of r.karts) if (k !== bot) k.finishedAt = 0;
+    bot.ticket = { ...bot.ticket, deadline: 999 };
+    bot.kart = { ...spawnKart(track, cable.s - 45, cable.lateral), speed: 18 };
+    bot.proj = { s: cable.s - 45, lateral: cable.lateral };
+    expect(Math.abs(-0.3 * HALL.halfWidth - cable.lateral)).toBeLessThan(cable.width / 2);
+    const events = runBots(r, 4);
+    expect(bot.proj.s).toBeGreaterThan(cable.s + cable.length);
+    expect(events.filter((e) => e.type === 'hit' && e.kind === 'cable')).toEqual([]);
+  });
+});
+
 describe('determinism across frame rates (Review Focus 5)', () => {
   it('gives the same finishing order at 30 fps and at 144 fps', () => {
     const a = botRace(1, 31);

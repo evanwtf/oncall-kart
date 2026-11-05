@@ -10,13 +10,29 @@ import {
   type KartState,
 } from './kart';
 import { resolveContacts } from './contact';
-import { lapStart, lapUpdate, raceProgress, type LapState } from './lap';
+import { lapStart, lapUpdate, type LapState } from './lap';
 import type { Op, Step } from './ops';
 import { DRIVERS } from './drivers';
+import { touches, type Hazard } from './hazards';
+import {
+  collectBoxes,
+  giveItem,
+  hitKart,
+  hitPuddles,
+  stepProjectiles,
+  useItem,
+  type ItemBox,
+  type ItemKind,
+  type Projectile,
+  type Puddle,
+} from './items';
 import { makeRng, type Rng } from './rng';
 import { applyStep, issueTicket, nextStep, type Ticket } from './ticket';
 import { crossedForward, type Projection, type Track } from './track';
 import { TUNING } from './tuning';
+import type { HitKind, HitOutcome } from './penalty';
+
+export { standings } from './standings';
 
 export type LapCount = 1 | 3 | 10;
 
@@ -55,6 +71,16 @@ export interface KartRuntime {
   stuckTime: number;
   /** Last gate row this kart triggered: a row triggers once per pass. */
   lastGateRow: number | null;
+  item: ItemKind | null;
+  /** Race time the kart got its item. */
+  itemAt: number;
+  /** The item input in the last substep: an item is used on the press. */
+  itemButton: boolean;
+  rollbackArmed: boolean;
+  /** Firewall time left. */
+  shieldTime: number;
+  /** Per hazard: the kart touched it in the last substep. A hazard hits on contact. */
+  hazardContact: boolean[];
 }
 
 export type RaceEvent =
@@ -67,6 +93,9 @@ export type RaceEvent =
   | { type: 'lap'; kartId: number; completed: number; lapTime: number }
   | { type: 'board-reshuffled'; rows: number[] }
   | { type: 'respawn'; kartId: number }
+  | { type: 'item-picked'; kartId: number; item: ItemKind }
+  | { type: 'item-used'; kartId: number; item: ItemKind }
+  | { type: 'hit'; kartId: number; kind: HitKind; outcome: HitOutcome; byId: number | null }
   | { type: 'go' }
   | { type: 'finished'; kartId: number; time: number };
 
@@ -86,6 +115,12 @@ export interface Race {
   nextTicketNumber: number;
   /** Frame time not yet run as a fixed substep. */
   stepAcc: number;
+  boxes: ItemBox[];
+  projectiles: Projectile[];
+  puddles: Puddle[];
+  hazards: readonly Hazard[];
+  /** Next id for a projectile or a puddle. */
+  nextEntityId: number;
 }
 
 /**
@@ -96,22 +131,6 @@ export function gridSlot(index: number, track: Track): Projection {
   const s = track.def.gridS + 30 - 4 * index;
   const lateral = track.def.halfWidth * 0.35 * (index % 2 === 0 ? 1 : -1);
   return { s, lateral };
-}
-
-/** Kart ids, best first: finished karts by finishedAt, then the rest by progress. */
-export function standings(race: Race): number[] {
-  const { length, def } = race.track;
-  const progress = (k: KartRuntime) => raceProgress(k.lap, k.proj.s, length, def.sectorCount);
-  return [...race.karts]
-    .sort((a, b) => {
-      if (a.finishedAt !== null && b.finishedAt !== null) {
-        return a.finishedAt - b.finishedAt || a.id - b.id;
-      }
-      if (a.finishedAt !== null) return -1;
-      if (b.finishedAt !== null) return 1;
-      return progress(b) - progress(a) || a.id - b.id;
-    })
-    .map((k) => k.id);
 }
 
 export function createRace(config: RaceConfig, track: Track): Race {
@@ -139,8 +158,18 @@ export function createRace(config: RaceConfig, track: Track): Race {
       offroadTime: 0,
       stuckTime: 0,
       lastGateRow: null,
+      item: null,
+      itemAt: 0,
+      itemButton: false,
+      rollbackArmed: false,
+      shieldTime: 0,
+      hazardContact: (track.def.hazards ?? []).map(() => false),
     });
   }
+  const hw = track.def.halfWidth;
+  const boxes = (track.def.itemBoxRows ?? []).flatMap((s) =>
+    [-0.75, -0.25, 0.25, 0.75].map((f) => ({ s, lateral: f * hw, respawnAt: 0 })),
+  );
   return {
     config,
     track,
@@ -153,6 +182,11 @@ export function createRace(config: RaceConfig, track: Track): Race {
     playerId: 0,
     nextTicketNumber,
     stepAcc: 0,
+    boxes,
+    projectiles: [],
+    puddles: [],
+    hazards: track.def.hazards ?? [],
+    nextEntityId: 1,
   };
 }
 
@@ -172,6 +206,7 @@ function doStep(race: Race, k: KartRuntime, step: Step, events: RaceEvent[]): vo
     k.kart = { ...k.kart, boostTime: Math.max(k.kart.boostTime, TUNING.ticketCloseBoost) };
     events.push({ type: 'ticket-closed', kartId: k.id, ticket });
     newTicket(race, k, events);
+    giveItem(race, k, events);
   }
 }
 
@@ -270,8 +305,8 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
           doStep(race, k, slot.op, events);
         } else {
           k.stats.wrongGates++;
-          k.kart = { ...k.kart, spinTime: TUNING.wrongGateSpin, driftDir: 0, driftTime: 0 };
           events.push({ type: 'wrong-gate', kartId: k.id, op: slot.op });
+          hitKart(k, 'wrong-gate', null, events);
         }
       }
       if (k.id === race.playerId) passedRows.push(ri);
@@ -287,6 +322,23 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
         doStep(race, k, 'PIT', events);
       }
     }
+
+    // Items: pick up, then use on the press of the item input.
+    k.shieldTime = Math.max(0, k.shieldTime - h);
+    collectBoxes(race, k, events);
+    const press = input.item === true && !k.itemButton;
+    k.itemButton = input.item === true;
+    if (press && k.kart.spinTime === 0) events.push(...useItem(race, k.id));
+
+    // Hazards hit on contact; puddles on touch.
+    race.hazards.forEach((hz, hi) => {
+      const now = touches(hz, proj, race.time, track);
+      if (now && !k.hazardContact[hi] && (hz.kind === 'cable' || hz.kind === 'cron')) {
+        hitKart(k, hz.kind, null, events);
+      }
+      k.hazardContact[hi] = now;
+    });
+    hitPuddles(race, k, events);
 
     // SLA.
     if (race.time > k.ticket.deadline) {
@@ -310,7 +362,10 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
     updateRubberBand(race, k, h);
   });
 
-  // 4. The change board moves behind the player.
+  // 4. Pages fly; puddles dry up.
+  stepProjectiles(race, h, events);
+
+  // 5. The change board moves behind the player.
   for (const ri of passedRows) {
     const { board, rows } = reshuffleAfterPass(race.board, ri, race.rng);
     race.board = board;

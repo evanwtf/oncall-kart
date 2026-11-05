@@ -2,6 +2,7 @@ import { NO_INPUT, type KartInput } from './kart';
 import { raceProgress } from './lap';
 import type { KartRuntime, Race } from './race';
 import { hash01 } from './rng';
+import { standings } from './standings';
 import { nextStep } from './ticket';
 import { wrapS, type Track } from './track';
 import { TUNING } from './tuning';
@@ -84,6 +85,34 @@ function gateLateral(race: Race, k: KartRuntime, rowIndex: number, profile: BotP
   return here >= 0 ? edge : -edge;
 }
 
+/**
+ * Steer round a cable patch ahead. A bot misses a patch with its
+ * wrongLaneChance (once per patch and lap), so weak bots hit more of them.
+ */
+function avoidCables(race: Race, k: KartRuntime, lateral: number, profile: BotProfile): number {
+  const { length, def } = race.track;
+  let out = lateral;
+  race.hazards.forEach((h, i) => {
+    if (h.kind !== 'cable') return;
+    const ahead = wrapS(h.s - k.proj.s, length);
+    const inside = wrapS(k.proj.s - h.s, length) <= h.length;
+    if (!inside && ahead > TUNING.botGateLookahead) return;
+    if (hash01(race.config.seed, k.id, k.lap.completed, i, 4) < profile.wrongLaneChance) return;
+    const clear = h.width / 2 + TUNING.kartRadius + 0.5;
+    if (Math.abs(out - h.lateral) >= clear) return;
+    const edge = def.halfWidth - TUNING.kartRadius;
+    const left = Math.min(edge, h.lateral + clear);
+    const right = Math.max(-edge, h.lateral - clear);
+    // The side with more room, or the nearer side when both fit.
+    const roomLeft = edge - (h.lateral + clear);
+    const roomRight = h.lateral - clear + edge;
+    if (roomLeft < 0) out = right;
+    else if (roomRight < 0) out = left;
+    else out = Math.abs(left - out) < Math.abs(right - out) ? left : right;
+  });
+  return out;
+}
+
 /** The lateral offset the bot wants for the pit, or null when it does not need the pit. */
 function pitLateral(race: Race, k: KartRuntime): number | null {
   const { pit, halfWidth } = race.track.def;
@@ -125,6 +154,7 @@ export function botInput(race: Race, kartId: number): KartInput {
     lateral =
       gateLateral(race, k, row.index, profile) + 0.5 * profile.lineNoise * Math.sin(s / 7 + k.id);
   }
+  lateral = avoidCables(race, k, lateral, profile);
   const pit = k.finishedAt === null ? pitLateral(race, k) : null;
   if (pit !== null) lateral = pit;
 
@@ -164,7 +194,14 @@ export function botInput(race: Race, kartId: number): KartInput {
     drift = true;
     steer = dir * Math.max(0.5, Math.abs(steer));
   }
-  return { throttle, brake, steer, drift };
+  return { throttle, brake, steer, drift, item: wantsItem(race, k, profile) };
+}
+
+/** Use the item once it has been held for itemDelay. A leader keeps a Page: it has no target. */
+function wantsItem(race: Race, k: KartRuntime, profile: BotProfile): boolean {
+  if (k.item === null || k.finishedAt !== null || k.kart.spinTime > 0) return false;
+  if (race.time - k.itemAt < profile.itemDelay) return false;
+  return k.item !== 'page' || standings(race)[0] !== k.id;
 }
 
 /**

@@ -1,5 +1,8 @@
 import type { TicketType } from './runbooks';
 
+/** Spin after a wrong gate: the time penalty. */
+const WRONG_GATE_SPIN = 0.9;
+
 /** Every tunable number in the game logic. Units: metres, seconds, radians. */
 export const TUNING = {
   // Tickets. SLA time = slaBase + slaPerStep * number of steps.
@@ -70,10 +73,43 @@ export const TUNING = {
   /** Bot speed scale: bounds, the gap (m) for the full effect, and the rate per second. */
   rubberBand: { min: 0.94, max: 1.08, range: 150, rate: 0.05 },
 
+  // Items.
+  /** Pickup radius (m) of an item box, kart center to box center. */
+  boxRadius: 1.6,
+  /** Seconds before a picked box is back. */
+  boxRespawn: 3,
+  coffeeBoost: 1.5,
+  /** Firewall time (s). */
+  shieldTime: 5,
+  /** Page speed (m/s): faster than any kart. */
+  pageSpeed: 40,
+  /** Life (s) of a Page with no target. */
+  pageLife: 4,
+  /** Life (s) of a Page that chases a target. */
+  pageSeekLife: 15,
+  /** How fast (m/s) a Page closes the lateral gap to its target. */
+  pageTurn: 20,
+  /** A puddle lands this far (m) behind the thrower. */
+  spillOffset: 3,
+  spillLife: 25,
+  puddleRadius: 1,
+  /** Spin time (s) per hit kind. */
+  hitSpin: { 'wrong-gate': WRONG_GATE_SPIN, page: 1.3, spill: 1.0, cable: 0.8, cron: 1.2 },
+
+  // Hazards.
+  /** Time (s) for a cron barrel to roll across and back. */
+  cronPeriod: 6,
+  /** Yaw on ice, as a share of the yaw on the road. */
+  iceGrip: 0.55,
+  /** Drift slide on ice, as a multiple of the road slide. */
+  iceSlide: 2,
+  /** Slide wide in a plain turn on ice, as a share of speed at full steer. */
+  iceSlip: 0.12,
+
   // Race.
   countdown: 3,
   /** Spin after a wrong gate: the time penalty. */
-  wrongGateSpin: 0.9,
+  wrongGateSpin: WRONG_GATE_SPIN,
   ticketCloseBoost: 1.2,
   /** Time held at the pit box while the tech works. */
   pitHold: 1,

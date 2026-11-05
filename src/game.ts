@@ -65,7 +65,8 @@ function seedFromUrl(): number | null {
 }
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
-  const track = buildTrack(HALL);
+  // No item boxes or hazards until they render (phase 2, task 4).
+  const track = buildTrack({ ...HALL, itemBoxRows: [], hazards: [] });
   const fixedSeed = seedFromUrl();
   const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 2 ** 31);
   const keyboard = createKeyboard(window);

@@ -1,3 +1,4 @@
+import type { Hazard } from './hazards';
 import { dot, type Vec2 } from './vec';
 
 // s is metres along the centerline, in [0, length). lateral > 0 is left of the
@@ -30,6 +31,9 @@ export interface TrackDef {
   pit: PitDef;
   /** s of the starting grid. */
   gridS: number;
+  /** s (m) of each item-box row. Each row holds 4 boxes across the road. */
+  itemBoxRows?: readonly number[];
+  hazards?: readonly Hazard[];
 }
 
 export interface Projection {
