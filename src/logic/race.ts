@@ -1,3 +1,4 @@
+import { botInput, profileOf, updateRubberBand } from './bot';
 import { createBoard, reshuffleAfterPass, slotAt, type Board } from './board';
 import {
   constrainToTrack,
@@ -11,6 +12,7 @@ import {
 import { resolveContacts } from './contact';
 import { lapStart, lapUpdate, raceProgress, type LapState } from './lap';
 import type { Op, Step } from './ops';
+import { DRIVERS } from './drivers';
 import { makeRng, type Rng } from './rng';
 import { applyStep, issueTicket, nextStep, type Ticket } from './ticket';
 import { crossedForward, type Projection, type Track } from './track';
@@ -34,6 +36,13 @@ export interface KartStats {
 
 export interface KartRuntime {
   id: number;
+  /** Index into DRIVERS. */
+  driverIndex: number;
+  isBot: boolean;
+  /** Index into BOT_PROFILES, or null for the player. */
+  botProfile: number | null;
+  /** Rubber-band scale on the top speed (bots only; 1 for the player). */
+  speedScale: number;
   kart: KartState;
   proj: Projection;
   lap: LapState;
@@ -75,6 +84,8 @@ export interface Race {
   karts: KartRuntime[];
   playerId: 0;
   nextTicketNumber: number;
+  /** Frame time not yet run as a fixed substep. */
+  stepAcc: number;
 }
 
 /**
@@ -114,6 +125,10 @@ export function createRace(config: RaceConfig, track: Track): Race {
     const slot = gridSlot(id === 0 ? bots : id - 1, track);
     karts.push({
       id,
+      driverIndex: (config.driverColor + id) % DRIVERS.length,
+      isBot: id !== 0,
+      botProfile: id === 0 ? null : id - 1,
+      speedScale: 1,
       kart: spawnKart(track, slot.s, slot.lateral),
       proj: slot,
       lap: lapStart(0),
@@ -137,6 +152,7 @@ export function createRace(config: RaceConfig, track: Track): Race {
     karts,
     playerId: 0,
     nextTicketNumber,
+    stepAcc: 0,
   };
 }
 
@@ -182,13 +198,18 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
 
   // 1. Move every kart.
   const prevProj = race.karts.map((k) => k.proj);
-  const kartInputs = race.karts.map(
-    (k) => (k.finishedAt === null ? inputs[k.id] : undefined) ?? NO_INPUT,
+  // Bots decide from the state before anyone moves, so kart order does not matter.
+  // A bot that finished drives on; a player who finished coasts.
+  const kartInputs = race.karts.map((k) =>
+    k.isBot
+      ? botInput(race, k.id)
+      : ((k.finishedAt === null ? inputs[k.id] : undefined) ?? NO_INPUT),
   );
   race.karts.forEach((k, i) => {
     const prev = prevProj[i] as Projection;
     const input = kartInputs[i] as KartInput;
-    let kart = stepKart(k.kart, input, h, surfaceAt(prev, track));
+    const capScale = k.isBot ? profileOf(k).topSpeedScale * k.speedScale : 1;
+    let kart = stepKart(k.kart, input, h, surfaceAt(prev, track), capScale);
     let proj = track.project(kart.pos, prev.s);
     const constrained = constrainToTrack(kart, proj, track);
     if (constrained !== kart) {
@@ -286,6 +307,7 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
     if (k.offroadTime > TUNING.offroadRespawn || k.stuckTime > TUNING.stuckRespawn) {
       events.push(...respawn(race, k.id));
     }
+    updateRubberBand(race, k, h);
   });
 
   // 4. The change board moves behind the player.
@@ -298,8 +320,10 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
 
 /**
  * Advance the race by dt seconds of wall time. A long frame is cut to
- * TUNING.maxFrame; the logic runs in fixed substeps of about TUNING.step,
- * so a fast kart never skips a gate row, the line or a wall. Mutates race.
+ * TUNING.maxFrame. The logic runs in fixed substeps of TUNING.step; time
+ * left over carries to the next call. So the same inputs give the same race
+ * at any frame rate, and a fast kart never skips a gate row, the line or a
+ * wall. Mutates race.
  */
 export function stepRace(race: Race, inputs: readonly KartInput[], dt: number): RaceEvent[] {
   const events: RaceEvent[] = [];
@@ -313,8 +337,11 @@ export function stepRace(race: Race, inputs: readonly KartInput[], dt: number): 
     }
     return events;
   }
-  const n = Math.max(1, Math.round(frame / TUNING.step));
-  const h = frame / n;
-  for (let i = 0; i < n; i++) substep(race, inputs, h, events);
+  race.stepAcc += frame;
+  // The tolerance absorbs rounding, so a frame of exactly one step runs one substep.
+  while (race.stepAcc >= TUNING.step * (1 - 1e-6)) {
+    race.stepAcc -= TUNING.step;
+    substep(race, inputs, TUNING.step, events);
+  }
   return events;
 }

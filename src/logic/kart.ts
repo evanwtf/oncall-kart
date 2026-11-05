@@ -60,13 +60,17 @@ export function driftStage(driftTime: number): 0 | 1 | 2 | 3 {
   return 0;
 }
 
-/** The speed cap for the surface and the active effects. */
-function speedCap(k: KartState, surface: Surface): number {
-  let cap = TUNING.topSpeed;
-  if (surface === 'offroad') cap = TUNING.offroadTopSpeed;
-  if (k.boostTime > 0) cap = TUNING.topSpeed * TUNING.boostFactor;
+/**
+ * The speed cap for the surface and the active effects. capScale scales the
+ * kart's own top speed (bot skill and rubber-banding); the pit limit is fixed.
+ */
+function speedCap(k: KartState, surface: Surface, capScale: number): number {
+  const top = TUNING.topSpeed * capScale;
+  let cap = top;
+  if (surface === 'offroad') cap = TUNING.offroadTopSpeed * capScale;
+  if (k.boostTime > 0) cap = top * TUNING.boostFactor;
   if (surface === 'pit') cap = Math.min(cap, TUNING.pitSpeedLimit);
-  if (k.slowTime > 0) cap = Math.min(cap, TUNING.topSpeed * TUNING.slowFactor);
+  if (k.slowTime > 0) cap = Math.min(cap, top * TUNING.slowFactor);
   return cap;
 }
 
@@ -75,7 +79,13 @@ function approach(v: number, target: number, rate: number, dt: number): number {
   return v < target ? Math.min(target, v + rate * dt) : Math.max(target, v - rate * dt);
 }
 
-export function stepKart(k: KartState, input: KartInput, dt: number, surface: Surface): KartState {
+export function stepKart(
+  k: KartState,
+  input: KartInput,
+  dt: number,
+  surface: Surface,
+  capScale = 1,
+): KartState {
   const timers = {
     boostTime: Math.max(0, k.boostTime - dt),
     slowTime: Math.max(0, k.slowTime - dt),
@@ -92,7 +102,7 @@ export function stepKart(k: KartState, input: KartInput, dt: number, surface: Su
     };
   }
 
-  const cap = speedCap(k, surface);
+  const cap = speedCap(k, surface, capScale);
   let speed = k.speed;
   let heading = k.heading;
   let driftDir = k.driftDir;

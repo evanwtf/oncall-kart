@@ -56,6 +56,20 @@ export const TUNING = {
   /** Bounce in a kart-to-kart hit: 0 is dead, 1 is fully elastic. */
   contactRestitution: 0.3,
 
+  // Bots.
+  /** Base distance (m) to the point a bot steers at; it grows with speed. */
+  botLookahead: 8,
+  /** Distance (m) before a gate row at which a bot lines up on its gate. */
+  botGateLookahead: 40,
+  /** Distance (m) before the pit entry at which a bot that needs the pit lines up. */
+  botPitLookahead: 40,
+  /** Steering per radian of heading error. */
+  botSteerGain: 2.5,
+  /** Turn (rad) over the 20 m ahead above which a bot may drift. */
+  botDriftTurn: 0.6,
+  /** Bot speed scale: bounds, the gap (m) for the full effect, and the rate per second. */
+  rubberBand: { min: 0.94, max: 1.08, range: 150, rate: 0.05 },
+
   // Race.
   countdown: 3,
   /** Spin after a wrong gate: the time penalty. */

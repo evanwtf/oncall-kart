@@ -32,3 +32,21 @@ export function shuffle<T>(rng: Rng, items: readonly T[]): T[] {
   }
   return out;
 }
+
+/**
+ * A value in [0, 1) from a list of integers: the same list always gives the
+ * same value. For random choices that must not depend on call order, such
+ * as a bot's decision for one gate row on one lap.
+ */
+export function hash01(...parts: readonly number[]): number {
+  let h = 0x811c9dc5;
+  for (const p of parts) {
+    h = Math.imul(h ^ (p | 0), 0x01000193);
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x2c1b3c6d);
+    h ^= h >>> 12;
+  }
+  h = Math.imul(h ^ (h >>> 16), 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
