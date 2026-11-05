@@ -191,9 +191,12 @@ export function createTouch(root: HTMLElement): TouchControls {
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onEnd);
   window.addEventListener('pointercancel', onEnd);
-  // lostpointercapture does not bubble: listen in the capture phase.
+  // Capture phase: a handler that stops propagation cannot hide the release.
   window.addEventListener('lostpointercapture', onEnd, true);
   window.addEventListener('blur', releaseAll);
+  // The pad centre is a screen position: a rotation or a resize moves the layout under it.
+  window.addEventListener('resize', releasePad);
+  window.addEventListener('orientationchange', releasePad);
   document.addEventListener('visibilitychange', onVisibility);
   // No context menu or callout on a long press.
   const noMenu = (e: Event) => e.preventDefault();
@@ -242,6 +245,8 @@ export function createTouch(root: HTMLElement): TouchControls {
       window.removeEventListener('pointercancel', onEnd);
       window.removeEventListener('lostpointercapture', onEnd, true);
       window.removeEventListener('blur', releaseAll);
+      window.removeEventListener('resize', releasePad);
+      window.removeEventListener('orientationchange', releasePad);
       document.removeEventListener('visibilitychange', onVisibility);
       el.removeEventListener('contextmenu', noMenu);
       visible = false;

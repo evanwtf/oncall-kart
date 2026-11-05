@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInput, type InputSource } from '../src/input';
 import { NO_INPUT, type KartInput } from '../src/logic/kart';
 import {
@@ -250,13 +250,55 @@ describe('createTouch', () => {
     expect(t.read().drift).toBe(false);
   });
 
-  it('stops listening and removes its DOM after dispose', () => {
+  it('releases the pad on resize and on orientationchange', () => {
     const t = make();
-    t.dispose();
-    touch = null;
+    for (const type of ['resize', 'orientationchange']) {
+      ptr(q('.touch-pad'), 'pointerdown', 1, 100, 300);
+      ptr(window, 'pointermove', 1, 170, 300);
+      expect(t.read().steer).toBe(-1);
+      window.dispatchEvent(new Event(type));
+      expect(t.read().steer, type).toBe(0);
+    }
+  });
+
+  it('removes every window and document listener it adds, and its DOM, on dispose', () => {
+    const targets = [window, document] as const;
+    const added: [EventTarget, string, unknown, boolean][] = [];
+    const removed: [EventTarget, string, unknown, boolean][] = [];
+    const capture = (o: unknown) =>
+      typeof o === 'boolean' ? o : !!(o as AddEventListenerOptions)?.capture;
+    const spies = targets.flatMap((tg) => [
+      vi.spyOn(tg, 'addEventListener').mockImplementation(function (
+        this: EventTarget,
+        type,
+        fn,
+        o,
+      ) {
+        added.push([tg, type, fn, capture(o)]);
+      }),
+      vi.spyOn(tg, 'removeEventListener').mockImplementation(function (
+        this: EventTarget,
+        type,
+        fn,
+        o,
+      ) {
+        removed.push([tg, type, fn, capture(o)]);
+      }),
+    ]);
+    try {
+      const t = createTouch(root);
+      expect(added.length).toBeGreaterThan(0);
+      t.dispose();
+    } finally {
+      for (const s of spies) s.mockRestore();
+    }
     expect(root.querySelector('.touch-pad')).toBeNull();
-    ptr(window, 'pointermove', 1, 170, 300);
-    expect(t.read()).toEqual(NO_INPUT);
+    for (const a of added) {
+      const match = removed.some(
+        (r) => r[0] === a[0] && r[1] === a[1] && r[2] === a[2] && r[3] === a[3],
+      );
+      expect(match, `${a[1]} still attached`).toBe(true);
+    }
   });
 });
 
