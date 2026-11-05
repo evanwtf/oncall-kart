@@ -1,0 +1,91 @@
+name: ci
+
+# Push to main only: fork pull requests never reach the self-hosted runner.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      # Shared runner: scope the npm cache to this run.
+      - run: echo "npm_config_cache=$RUNNER_TEMP/npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: format and lint
+        run: |
+          status=0
+          npm run format:check || status=$?
+          npm run lint || status=$?
+          exit "$status"
+      - run: npm run typecheck
+      - run: npm test
+      - run: node scripts/check-public.mjs
+      - run: npm run build
+
+  e2e:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    # The tag must equal the installed @playwright/test version (tests/ci.test.ts).
+    container: mcr.microsoft.com/playwright:v1.64.1-noble
+    env:
+      # The container runs as root. Keep its npm cache inside the container,
+      # so no root-owned files land in the runner's shared directories.
+      npm_config_cache: /tmp/npm-cache
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm ci
+      - run: npx playwright test
+      - name: Upload the Playwright report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 1
+      # Root wrote these files into the runner's workspace. Remove them here,
+      # so the next checkout by the runner user can clean the directory.
+      - name: Remove root-owned build output
+        if: always()
+        run: rm -rf node_modules dist playwright-report test-results
+
+  deploy:
+    needs: [check, e2e]
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - run: echo "npm_config_cache=$RUNNER_TEMP/npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+          retention-days: 1
+      - id: deployment
+        uses: actions/deploy-pages@v5

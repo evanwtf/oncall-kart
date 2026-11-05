@@ -1,0 +1,11 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+blob-report/
+.superpowers/
+screenshots/
+.public-denylist
+.DS_Store
+*.log
+.pw-browsers/

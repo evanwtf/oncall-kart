@@ -1,0 +1,44 @@
+# Local mirror of CI. Install: uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
+default_stages: [pre-commit]
+repos:
+  - repo: local
+    hooks:
+      # The public-repo guard runs first, before any hook rewrites a file.
+      - id: check-public
+        name: public-repo guard
+        entry: node scripts/check-public.mjs
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: refuse-session-ids
+        name: refuse session IDs in the commit message
+        entry: node scripts/refuse-session-ids.mjs
+        language: system
+        stages: [commit-msg]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: lint
+        name: eslint
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+        types_or: [ts, javascript]
+      - id: typecheck
+        name: tsc --noEmit
+        entry: npm run typecheck
+        language: system
+        pass_filenames: false
+        types_or: [ts, javascript]
