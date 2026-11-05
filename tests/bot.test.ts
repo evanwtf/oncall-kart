@@ -127,7 +127,8 @@ describe('bot mistakes', () => {
     expect(total).toBeGreaterThan(0);
     // Bot 1 holds the strongest profile, bot 7 the weakest.
     expect(wrong[1] as number).toBeLessThan(wrong[7] as number);
-  });
+    // Two 10-lap races: about 4 s here, slower on the shared CI runner.
+  }, 60_000);
 });
 
 describe('bots and the pit (Review Focus 4)', () => {
