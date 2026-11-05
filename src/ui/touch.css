@@ -288,6 +288,63 @@
   }
 }
 
+/*
+ * A short landscape phone: a compact ticket card with the next step only, so the
+ * gate signs ahead stay in view above the road.
+ */
+@media (max-height: 500px) {
+  /* The SLA bar and its seconds share one row. */
+  .ticket {
+    width: 220px;
+    padding: 6px 10px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 8px;
+    line-height: 1.2;
+  }
+
+  .ticket-head,
+  .ticket-steps {
+    grid-column: 1 / -1;
+  }
+
+  .ticket-head {
+    margin-bottom: 2px;
+  }
+
+  .ticket-steps {
+    margin-bottom: 3px;
+  }
+
+  .step.next {
+    line-height: 1.15;
+  }
+
+  .sla-text {
+    margin-top: 0;
+  }
+
+  #ui.touch-on .hud-left,
+  #ui.touch-on .ticket {
+    top: calc(var(--safe-top) + 8px);
+  }
+
+  #ui.touch-on .touch-pause {
+    top: calc(var(--safe-top) + 8px);
+  }
+
+  .ticket-steps .step:not(.next) {
+    display: none;
+  }
+}
+
+/* On a phone the pause menu needs the middle of the screen. */
+#ui.touch-on[data-screen='paused'] .ticket,
+#ui.touch-on[data-screen='paused'] .hud-speed {
+  display: none;
+}
+
 /* Portrait phone: the ticket card goes under the lap counter. */
 @media (orientation: portrait) and (max-width: 700px) {
   .drivers {
@@ -308,6 +365,11 @@
     right: calc(var(--safe-right) + 16px);
     bottom: calc(var(--safe-bottom) + 16px + var(--btn) + var(--gap) + var(--btn-big) + 10px);
   }
+
+  /* Toasts below the ticket card. */
+  .toasts {
+    top: 40%;
+  }
 }
 
 .rotate-hint {
@@ -320,7 +382,7 @@
   #ui.touch-on[data-screen='racing'] .rotate-hint:not([hidden]) {
     position: absolute;
     left: 50%;
-    top: 45%;
+    top: 58%;
     transform: translate(-50%, -50%);
     width: min(300px, calc(100% - 32px));
     display: flex;

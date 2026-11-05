@@ -34,8 +34,15 @@ const ACTIONS: Record<string, Action> = {
   KeyD: 'right',
 };
 
+const DRIVE = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT, ...DRIFT]);
+
+/** A key that drives the kart. A press means the player is on the keyboard now. */
+export function isDriveKey(code: string): boolean {
+  return DRIVE.has(code);
+}
+
 /** Keys the page must not act on (scroll, button press). */
-const PREVENT = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT, ...DRIFT, 'Backspace']);
+const PREVENT = new Set([...DRIVE, 'Backspace']);
 
 export function createKeyboard(target: Window): Keyboard {
   const held = new Set<string>();

@@ -1,4 +1,4 @@
-import { createInput, createKeyboard, type Action } from './input';
+import { createInput, createKeyboard, isDriveKey, type Action } from './input';
 import { NO_INPUT, spawnKart } from './logic/kart';
 import {
   createRace,
@@ -9,6 +9,7 @@ import {
   type RaceEvent,
 } from './logic/race';
 import { nextStep } from './logic/ticket';
+import type { TicketType } from './logic/runbooks';
 import { buildTrack } from './logic/track';
 import { HALL } from './logic/tracks/hall';
 import { TUNING } from './logic/tuning';
@@ -46,6 +47,8 @@ export interface DebugHooks {
   rowS(): number[];
   /** Only with ?debug=1: put the player at s on the centerline, at rest. */
   placePlayer?(s: number): void;
+  /** Only with ?debug=1: give the player a ticket of this type, at this step. */
+  setTicket?(type: TicketType, stepIndex: number): void;
 }
 
 declare global {
@@ -80,11 +83,25 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     autoGas: loadAutoGas(),
   };
   touch.setAutoGas(state.autoGas);
-  // A touchscreen laptop reports a fine pointer: the first touch turns the controls on.
-  const onPointerDown = (e: PointerEvent) => {
-    if (e.pointerType === 'touch') state.touch = true;
+  // The last device used wins. A touch shows the controls (a touchscreen laptop
+  // reports a fine pointer). A driving key hides them, which also stops
+  // auto-gas, so the keyboard brake works on a tablet with a keyboard.
+  const setTouch = (on: boolean) => {
+    if (state.touch === on) return;
+    state.touch = on;
+    touch.setVisible(on && (state.screen === 'countdown' || state.screen === 'racing'));
+    state.pauseIndex = Math.min(state.pauseIndex, pauseItems(on).length - 1);
   };
-  window.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener(
+    'pointerdown',
+    (e: PointerEvent) => {
+      if (e.pointerType === 'touch') setTouch(true);
+    },
+    true,
+  );
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (isDriveKey(e.code)) setTouch(false);
+  });
   // iOS: no pinch zoom, no double-tap zoom, no page scroll during play.
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('dblclick', (e) => e.preventDefault());
@@ -154,6 +171,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         break;
       case 'paused': {
         const items = pauseItems(state.touch);
+        // The item list changes length when the player switches device.
+        state.pauseIndex = Math.min(state.pauseIndex, items.length - 1);
         if (a === 'pause' || a === 'back') resume();
         if (a === 'up') state.pauseIndex = (state.pauseIndex + items.length - 1) % items.length;
         if (a === 'down') state.pauseIndex = (state.pauseIndex + 1) % items.length;
@@ -269,6 +288,10 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     rowS: () => race.board.map((r) => r.s),
   };
   if (new URLSearchParams(window.location.search).get('debug') === '1') {
+    window.__oncallKart.setTicket = (type: TicketType, stepIndex: number) => {
+      const k = player();
+      if (k) k.ticket = { ...k.ticket, type, stepIndex };
+    };
     window.__oncallKart.placePlayer = (s: number) => {
       const k = player();
       if (!k) return;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { createKeyboard, type Keyboard } from '../src/input';
+import { createKeyboard, isDriveKey, type Keyboard } from '../src/input';
 
 let kb: Keyboard | null = null;
 afterEach(() => kb?.dispose());
@@ -113,5 +113,14 @@ describe('keyboard', () => {
     down('Enter');
     expect(kb.read().throttle).toBe(0);
     expect(kb.takeActions()).toEqual([]);
+  });
+});
+
+describe('isDriveKey', () => {
+  it('is true for the driving keys only', () => {
+    for (const code of ['ArrowUp', 'KeyW', 'ArrowDown', 'KeyS', 'ArrowLeft', 'KeyD', 'Space'])
+      expect(isDriveKey(code), code).toBe(true);
+    for (const code of ['Enter', 'Escape', 'KeyP', 'KeyR', 'MetaLeft', 'Tab'])
+      expect(isDriveKey(code), code).toBe(false);
   });
 });

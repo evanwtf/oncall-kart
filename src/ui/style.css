@@ -216,6 +216,12 @@ body {
   border-radius: 50%;
 }
 
+.menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .menu-item {
   min-width: 220px;
   min-height: 48px;

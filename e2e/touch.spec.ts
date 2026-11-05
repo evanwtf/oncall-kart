@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { TICKET_TYPES, type TicketType } from '../src/logic/runbooks';
 
 /** Set SCREENSHOTS=1 to save screenshots to screenshots/ (git-ignored). */
 const SHOTS = !!process.env.SCREENSHOTS;
@@ -50,6 +51,8 @@ async function box(page: Page, sel: string): Promise<Box> {
 async function expectLayout(page: Page, sels: string[]) {
   const vp = page.viewportSize();
   if (!vp) throw new Error('no viewport');
+  // The DOM follows the game state on the next frame.
+  for (const s of sels) await expect(page.locator(s)).toBeVisible();
   const boxes = await Promise.all(sels.map((s) => box(page, s)));
   boxes.forEach((b, i) => {
     expect(b.x, `${sels[i]} left`).toBeGreaterThanOrEqual(0);
@@ -66,6 +69,49 @@ async function expectLayout(page: Page, sels: string[]) {
 const PAD_ID = 41;
 const HUD_AND_CONTROLS = ['.hud-left', '.ticket', '.hud-speed', '.touch-buttons', '.touch-pause'];
 
+/** The tallest ticket card: the longest title, at the longest pit step. */
+function worstTicket(): { type: TicketType; stepIndex: number } {
+  const byLength = <T>(xs: readonly T[], len: (x: T) => number) =>
+    xs.reduce((a, b) => (len(b) > len(a) ? b : a));
+  const title = byLength(TICKET_TYPES, (t) => t.title.length).title;
+  const pit = byLength(TICKET_TYPES, (t) => t.pitWork?.length ?? 0);
+  return { type: { ...pit, title }, stepIndex: pit.steps.indexOf('PIT') };
+}
+
+/** Give the player the worst ticket (needs ?debug=1) and wait for the card to show it. */
+async function setWorstTicket(page: Page) {
+  const w = worstTicket();
+  expect(w.type.title).toBe('Wrong hostname in inventory');
+  expect(w.type.pitWork).toBe('recable the top-of-rack switch');
+  await page.evaluate((x) => window.__oncallKart?.setTicket?.(x.type, x.stepIndex), w);
+  await expect(page.locator('.ticket-head')).toContainText(w.type.title);
+  await expect(page.locator('.step.next .work')).toHaveText('recable the top-of-rack switch');
+}
+
+/** On a landscape phone the card stays in the top 30%, so the gate signs ahead stay in view. */
+async function expectShortTicket(page: Page) {
+  const vp = page.viewportSize();
+  if (!vp) throw new Error('no viewport');
+  const b = await box(page, '.ticket');
+  expect(b.y + b.height, 'ticket bottom').toBeLessThanOrEqual(vp.height * 0.3);
+}
+
+/** Tap from the title to the race. */
+async function tapToRace(page: Page) {
+  await expect.poll(() => screen(page)).toBe('title');
+  await page.locator('.title').tap();
+  await expect.poll(() => screen(page)).toBe('setup');
+  await page.locator('.action', { hasText: 'Start' }).tap();
+  await expect.poll(() => screen(page), { timeout: 12_000 }).toBe('racing');
+}
+
+/** The pause menu clears the HUD that stays on screen; the card and the speed hide. */
+async function expectPauseLayout(page: Page) {
+  await expect(page.locator('.ticket')).toBeHidden();
+  await expect(page.locator('.hud-speed')).toBeHidden();
+  await expectLayout(page, ['.hud-left', '.pause .menu']);
+}
+
 test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', async ({ page }) => {
   test.setTimeout(150_000);
   const errors: string[] = [];
@@ -74,9 +120,22 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   });
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/oncall-kart/?seed=1');
+  await page.goto('/oncall-kart/?seed=1&debug=1');
   await expect.poll(() => screen(page)).toBe('title');
   await expect(page.locator('.title .prompt.only-touch')).toBeVisible();
+
+  // The page blocks zoom, scroll, selection and the callout.
+  const page_ = await page.evaluate(() => {
+    const body = getComputedStyle(document.body);
+    return {
+      viewport: document.querySelector('meta[name="viewport"]')?.getAttribute('content') ?? '',
+      touchAction: body.touchAction,
+      userSelect: body.userSelect || body.webkitUserSelect,
+    };
+  });
+  expect(page_.viewport).toContain('viewport-fit=cover');
+  expect(page_.touchAction).toBe('none');
+  expect(page_.userSelect).toBe('none');
 
   await page.locator('.title').tap();
   await expect.poll(() => screen(page)).toBe('setup');
@@ -91,7 +150,13 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   // The touch controls show on the track.
   await expect(page.locator('.touch')).toBeVisible();
   expect((await hooks(page)).touch).toBe(true);
+  expect(await page.locator('.touch-pad').evaluate((e) => getComputedStyle(e).touchAction)).toBe(
+    'none',
+  );
   await expectLayout(page, HUD_AND_CONTROLS);
+  await setWorstTicket(page);
+  await expectLayout(page, HUD_AND_CONTROLS);
+  await expectShortTicket(page);
 
   // Auto-gas drives with no button held.
   await page.waitForTimeout(2000);
@@ -133,6 +198,7 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   await autoGas.tap();
   await expect(autoGas).toHaveText('Auto-gas: Off');
   await expect(page.locator('.menu-item', { hasText: 'Respawn' })).toBeVisible();
+  await expectPauseLayout(page);
   await shot(page, 'pause');
   await autoGas.tap();
   await expect(autoGas).toHaveText('Auto-gas: On');
@@ -140,7 +206,7 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   await respawn.tap();
   await respawn.tap();
   await expect.poll(() => screen(page)).toBe('racing');
-  await expect(page.locator('.toast', { hasText: 'RESPAWN' })).toBeVisible();
+  await expect(page.locator('.toast', { hasText: 'RESPAWN' }).last()).toBeVisible();
 
   // Portrait and back: the hint shows, the controls stay inside the viewport.
   const landscape = page.viewportSize();
@@ -150,6 +216,16 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   await expect(page.locator('.rotate-hint')).toBeVisible();
   await shot(page, 'race-portrait');
   await expectLayout(page, [...HUD_AND_CONTROLS, '.rotate-hint']);
+  // A toast in portrait shows below the ticket card.
+  await page.locator('.touch-pause').tap();
+  await expect.poll(() => screen(page)).toBe('paused');
+  await expectPauseLayout(page);
+  await respawn.tap();
+  await respawn.tap();
+  await expect.poll(() => screen(page)).toBe('racing');
+  await expect(page.locator('.toast', { hasText: 'RESPAWN' }).last()).toBeVisible();
+  await expectLayout(page, [...HUD_AND_CONTROLS, '.rotate-hint', '.toast:last-child']);
+  await shot(page, 'race-portrait-toast');
   await page.locator('.rotate-close').tap();
   await expect(page.locator('.rotate-hint')).toBeHidden();
   await page.setViewportSize(landscape);
@@ -157,5 +233,37 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   await expectLayout(page, HUD_AND_CONTROLS);
   expect(await screen(page)).toBe('racing');
 
+  expect(errors).toEqual([]);
+});
+
+// Landscape Safari on a 667 x 375 phone leaves about 331 px under its toolbars.
+test('touch: a short landscape screen, auto-gas off, the tallest ticket', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.addInitScript(() => localStorage.setItem('oncall-kart.autoGas', 'off'));
+  await page.setViewportSize({ width: 667, height: 331 });
+  await page.goto('/oncall-kart/?seed=1&debug=1');
+  await tapToRace(page);
+
+  await expect(page.locator('.touch-gas')).toBeVisible();
+  await setWorstTicket(page);
+  await expectLayout(page, HUD_AND_CONTROLS);
+  await expectShortTicket(page);
+
+  // Parked short of a gate row: the signs stay clear of the card.
+  const rows = await page.evaluate(() => window.__oncallKart?.rowS() ?? []);
+  const row = rows[1];
+  if (row === undefined) throw new Error('no gate rows');
+  for (const d of [20, 12]) {
+    await page.evaluate((s) => window.__oncallKart?.placePlayer?.(s), row - d);
+    await page.waitForTimeout(600);
+    await shot(page, `667x331-gate-${d}m`);
+  }
+
+  await page.locator('.touch-pause').tap();
+  await expect.poll(() => screen(page)).toBe('paused');
+  await expectPauseLayout(page);
+  await shot(page, '667x331-pause');
   expect(errors).toEqual([]);
 });

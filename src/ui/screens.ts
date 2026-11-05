@@ -100,6 +100,8 @@ function button(cls: string, text: string | undefined, parent: HTMLElement): HTM
   // Out of the tab order: the arrow keys drive the menus, and a focused button
   // would also act on Enter, doubling the keyboard's confirm.
   b.tabIndex = -1;
+  // A press dragged off the button gives no click, and must not leave it focused either.
+  b.addEventListener('mousedown', (e) => e.preventDefault());
   return b;
 }
 
@@ -149,10 +151,11 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
 
   // Pause.
   const pause = el('div', 'screen pause', undefined, panels);
-  el('h2', '', 'Paused', pause);
+  const pauseMenu = el('div', 'menu', undefined, pause);
+  el('h2', '', 'Paused', pauseMenu);
   const pauseEls = new Map<PauseItem, HTMLButtonElement>(
     ALL_PAUSE_ITEMS.map((item) => {
-      const b = button('menu-item', item, pause);
+      const b = button('menu-item', item, pauseMenu);
       onTap(b, () => {
         const items = pauseItems(current?.touch ?? false);
         const i = items.indexOf(item);
@@ -189,7 +192,7 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
 
   // Portrait hint, for touch only (CSS shows it in portrait). Dismissed for the page.
   const rotate = el('div', 'rotate-hint', undefined, root);
-  el('span', '', 'Turn your phone sideways for the best view', rotate);
+  el('span', '', 'Turn your screen sideways for the best view', rotate);
   const rotateClose = button('rotate-close', '✕', rotate);
   rotateClose.setAttribute('aria-label', 'Dismiss');
   onTap(rotateClose, () => {

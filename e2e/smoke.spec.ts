@@ -59,6 +59,24 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
     await page.screenshot({ path: `screenshots/${test.info().project.name}-race.png` });
   }
 
+  // A touchscreen laptop: one touch shows the controls and starts auto-gas. A
+  // driving key hands control back to the keyboard, so the brake works.
+  await page.evaluate(() =>
+    document.body.dispatchEvent(
+      new PointerEvent('pointerdown', { pointerType: 'touch', pointerId: 9, bubbles: true }),
+    ),
+  );
+  await expect.poll(() => page.evaluate(() => window.__oncallKart?.touchControls())).toBe(true);
+  await page.waitForTimeout(500);
+  const before = await speed(page);
+  expect(before).toBeGreaterThan(5);
+  await page.keyboard.down('ArrowDown');
+  await page.waitForTimeout(800);
+  const braked = await speed(page);
+  await page.keyboard.up('ArrowDown');
+  expect(braked).toBeLessThan(before - 3);
+  expect(await page.evaluate(() => window.__oncallKart?.touchControls())).toBe(false);
+
   await page.keyboard.press('KeyP');
   await expect.poll(() => screen(page)).toBe('paused');
   await expect(page.locator('.menu-item', { hasText: 'Respawn' })).toBeHidden();
