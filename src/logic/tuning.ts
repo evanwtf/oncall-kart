@@ -50,6 +50,12 @@ export const TUNING = {
   slowFactor: 0.6,
   spinDecel: 22,
 
+  // Kart-to-kart contact.
+  /** Every kart is a circle of this radius (m) for contact. */
+  kartRadius: 1,
+  /** Bounce in a kart-to-kart hit: 0 is dead, 1 is fully elastic. */
+  contactRestitution: 0.3,
+
   // Race.
   countdown: 3,
   /** Spin after a wrong gate: the time penalty. */

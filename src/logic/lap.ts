@@ -58,7 +58,11 @@ export function lapUpdate(
   return { state: st, completedLap };
 }
 
-/** Laps done plus the fraction of the current lap: for ranking karts. */
-export function raceProgress(state: LapState, s: number, length: number): number {
-  return state.completed + s / length;
+/**
+ * Laps done plus the fraction of the current lap: for ranking karts. A kart
+ * that backed over the line (sector < 0) is behind the line, not almost a
+ * lap ahead: each full set of sectors it backed through costs one lap.
+ */
+export function raceProgress(state: LapState, s: number, length: number, sectorCount = 4): number {
+  return state.completed + Math.floor(state.sector / sectorCount) + s / length;
 }

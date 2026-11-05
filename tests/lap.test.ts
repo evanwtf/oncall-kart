@@ -96,3 +96,27 @@ describe('laps', () => {
     expect(raceProgress({ ...lapStart(0), completed: 2 }, 50, 100)).toBeCloseTo(2.5);
   });
 });
+
+describe('raceProgress behind the line', () => {
+  it('ranks a kart that backed over the line behind one that did not (issue #1)', () => {
+    const back = drive(lapStart(0), 2, -4); // to 98, sector -1
+    expect(back.state.sector).toBe(-1);
+    const stayed = drive(lapStart(0), 2, 1); // to 3
+    expect(raceProgress(back.state, back.s, 100)).toBeLessThan(
+      raceProgress(stayed.state, stayed.s, 100),
+    );
+    expect(raceProgress(back.state, back.s, 100)).toBeCloseTo(-0.02, 9);
+  });
+
+  it('counts a kart one lap down when it backs a whole lap', () => {
+    const r = drive(lapStart(0), 2, -100); // back to 2, sector -4
+    expect(raceProgress(r.state, r.s, 100)).toBeCloseTo(-0.98, 9);
+  });
+
+  it('is continuous over the line when a lap completes', () => {
+    const before = drive(lapStart(0), 2, 97); // to 99
+    const after = drive(before.state, before.s, 2); // to 1, lap 1
+    expect(raceProgress(before.state, before.s, 100)).toBeCloseTo(0.99, 9);
+    expect(raceProgress(after.state, after.s, 100)).toBeCloseTo(1.01, 9);
+  });
+});

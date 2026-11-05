@@ -3,24 +3,27 @@ import { NO_INPUT, spawnKart, surfaceAt, type KartInput } from '../src/logic/kar
 import type { Op } from '../src/logic/ops';
 import {
   createRace,
+  gridSlot,
   pitBoxS,
   respawn,
+  standings,
   stepRace,
   type Race,
   type RaceEvent,
 } from '../src/logic/race';
 import { TICKET_TYPES } from '../src/logic/runbooks';
-import { buildTrack } from '../src/logic/track';
+import { buildTrack, forwardDelta } from '../src/logic/track';
 import { HALL } from '../src/logic/tracks/hall';
 import { TUNING } from '../src/logic/tuning';
+import { dist } from '../src/logic/vec';
 import { scriptedInput } from './driver';
 
 const track = buildTrack(HALL);
 const DT = 1 / 60;
 const GAS: KartInput = { ...NO_INPUT, throttle: 1 };
 
-function newRace(laps: 1 | 3 | 10 = 1, seed = 1): Race {
-  return createRace({ laps, seed, driverColor: 0 }, track);
+function newRace(laps: 1 | 3 | 10 = 1, seed = 1, bots = 0): Race {
+  return createRace({ laps, seed, driverColor: 0, bots }, track);
 }
 
 /** Step through the countdown. */
@@ -413,5 +416,110 @@ describe('respawn', () => {
     }
     expect(types(ev)).toContain('respawn');
     expect(player(r).offroadTime).toBe(0);
+  });
+});
+
+describe('grid', () => {
+  const slots = Array.from({ length: 8 }, (_, i) => gridSlot(i, track));
+
+  it('puts all 8 slots after the line, inside gridS..gridS+40', () => {
+    for (const sl of slots) {
+      expect(sl.s).toBeGreaterThan(HALL.gridS);
+      expect(sl.s).toBeLessThanOrEqual(HALL.gridS + 40);
+      expect(Math.abs(sl.lateral)).toBeLessThan(HALL.halfWidth - TUNING.kartRadius);
+    }
+  });
+
+  it('puts the slots 2 abreast, with no two karts overlapping', () => {
+    expect(new Set(slots.map((sl) => sl.lateral)).size).toBe(2);
+    const pos = slots.map((sl) => spawnKart(track, sl.s, sl.lateral).pos);
+    pos.forEach((a, i) =>
+      pos.slice(i + 1).forEach((b) => expect(dist(a, b)).toBeGreaterThan(2 * TUNING.kartRadius)),
+    );
+  });
+
+  it('starts 8 karts on the grid with 7 bots', () => {
+    const r = newRace(1, 1, 7);
+    expect(r.karts).toHaveLength(8);
+    expect(r.karts.map((k) => k.id)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    for (const k of r.karts) expect(k.proj.s).toBeGreaterThan(HALL.gridS);
+  });
+});
+
+describe('standings', () => {
+  it('ranks a kart that backs over the line behind one that did not (issue #1)', () => {
+    const r = newRace(3, 1, 1);
+    toGo(r);
+    const [a, b] = r.karts;
+    if (!a || !b) throw new Error('karts');
+    // Both start just after the line. a reverses over it; b drives forward.
+    a.kart = spawnKart(track, 3, 3);
+    a.proj = { s: 3, lateral: 3 };
+    b.kart = spawnKart(track, 2, -3);
+    b.proj = { s: 2, lateral: -3 };
+    for (let i = 0; i < 300; i++) {
+      stepRace(r, [{ ...NO_INPUT, brake: 1 }, GAS], 1 / 120);
+    }
+    expect(a.lap.sector).toBeLessThan(0);
+    expect(standings(r)).toEqual([1, 0]);
+  });
+
+  it('orders unfinished karts by progress', () => {
+    const r = newRace(3, 1, 2);
+    const [a, b, c] = r.karts;
+    if (!a || !b || !c) throw new Error('karts');
+    a.lap = { ...a.lap, completed: 1 };
+    b.lap = { ...b.lap, completed: 2 };
+    c.lap = { ...c.lap, completed: 1 };
+    a.proj = { s: 100, lateral: 0 };
+    c.proj = { s: 200, lateral: 0 };
+    expect(standings(r)).toEqual([1, 2, 0]);
+  });
+
+  it('puts finished karts first, by finishedAt', () => {
+    const r = newRace(3, 1, 3);
+    const [a, b, c, d] = r.karts;
+    if (!a || !b || !c || !d) throw new Error('karts');
+    c.finishedAt = 90;
+    a.finishedAt = 95;
+    // b has more progress, but it has not finished.
+    b.lap = { ...b.lap, completed: 3 };
+    b.proj = { s: 300, lateral: 0 };
+    expect(standings(r)).toEqual([2, 0, 1, 3]);
+  });
+});
+
+describe('kart contact', () => {
+  it('stops a kart closing at 40 m/s from passing through the kart ahead', () => {
+    const r = newRace(1, 1, 1);
+    toGo(r);
+    const [a, b] = r.karts;
+    if (!a || !b) throw new Error('karts');
+    // The loading-dock straight, after the grid.
+    a.kart = { ...spawnKart(track, 60, 0), speed: 40 };
+    a.proj = { s: 60, lateral: 0 };
+    b.kart = spawnKart(track, 66, 0.2);
+    b.proj = { s: 66, lateral: 0.2 };
+    let minGap = Infinity;
+    for (let i = 0; i < 120; i++) {
+      stepRace(r, [GAS, NO_INPUT], 1 / 120);
+      minGap = Math.min(minGap, dist(a.kart.pos, b.kart.pos));
+      expect(forwardDelta(a.proj.s, b.proj.s, track.length)).toBeGreaterThan(0);
+    }
+    expect(minGap).toBeGreaterThan(2 * TUNING.kartRadius - 0.5);
+    expect(b.kart.speed).toBeGreaterThan(0);
+  });
+
+  it('separates two karts placed on top of each other within one step', () => {
+    const r = newRace(1, 1, 1);
+    toGo(r);
+    const [a, b] = r.karts;
+    if (!a || !b) throw new Error('karts');
+    a.kart = spawnKart(track, 80, 0);
+    a.proj = { s: 80, lateral: 0 };
+    b.kart = spawnKart(track, 80.3, 0.1);
+    b.proj = { s: 80.3, lateral: 0.1 };
+    stepRace(r, [NO_INPUT, NO_INPUT], 1 / 120);
+    expect(dist(a.kart.pos, b.kart.pos)).toBeGreaterThanOrEqual(2 * TUNING.kartRadius - 1e-6);
   });
 });

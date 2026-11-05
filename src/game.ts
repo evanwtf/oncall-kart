@@ -107,7 +107,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   document.addEventListener('dblclick', (e) => e.preventDefault());
   document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
   // The title and setup screens show the hall behind them: a race that never starts.
-  let race: Race = createRace({ laps: 1, seed: newSeed(), driverColor: 0 }, track);
+  let race: Race = createRace({ laps: 1, seed: newSeed(), driverColor: 0, bots: 0 }, track);
   const scene = createScene(canvas, race, { lowPower: coarse });
   let acc = 0;
   let finishTimer = 0;
@@ -119,6 +119,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         laps: LAP_CHOICES[state.setup.lapIndex] ?? 1,
         seed: newSeed(),
         driverColor: state.setup.colorIndex,
+        bots: 0,
       },
       track,
     );

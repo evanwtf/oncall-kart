@@ -8,7 +8,8 @@ import {
   type KartInput,
   type KartState,
 } from './kart';
-import { lapStart, lapUpdate, type LapState } from './lap';
+import { resolveContacts } from './contact';
+import { lapStart, lapUpdate, raceProgress, type LapState } from './lap';
 import type { Op, Step } from './ops';
 import { makeRng, type Rng } from './rng';
 import { applyStep, issueTicket, nextStep, type Ticket } from './ticket';
@@ -21,6 +22,8 @@ export interface RaceConfig {
   laps: LapCount;
   seed: number;
   driverColor: number;
+  /** Bot rivals, 0 to 7. The setup screen uses 7. */
+  bots: number;
 }
 
 export interface KartStats {
@@ -74,22 +77,41 @@ export interface Race {
   nextTicketNumber: number;
 }
 
-/** Grid slot i: two columns, rows 6 m apart, behind the grid line. */
-function gridSlot(track: Track, i: number): Projection {
-  const row = Math.floor(i / 2);
-  const s = track.def.gridS - row * 6;
-  const lateral = track.def.halfWidth * 0.35 * (i % 2 === 0 ? 1 : -1);
-  return { s: ((s % track.length) + track.length) % track.length, lateral: i === 0 ? 0 : lateral };
+/**
+ * Grid slot i of 8: two columns, 4 m apart in s, all after the finish line
+ * (inside gridS..gridS+40). Slot 0 is the front of the grid.
+ */
+export function gridSlot(index: number, track: Track): Projection {
+  const s = track.def.gridS + 30 - 4 * index;
+  const lateral = track.def.halfWidth * 0.35 * (index % 2 === 0 ? 1 : -1);
+  return { s, lateral };
+}
+
+/** Kart ids, best first: finished karts by finishedAt, then the rest by progress. */
+export function standings(race: Race): number[] {
+  const { length, def } = race.track;
+  const progress = (k: KartRuntime) => raceProgress(k.lap, k.proj.s, length, def.sectorCount);
+  return [...race.karts]
+    .sort((a, b) => {
+      if (a.finishedAt !== null && b.finishedAt !== null) {
+        return a.finishedAt - b.finishedAt || a.id - b.id;
+      }
+      if (a.finishedAt !== null) return -1;
+      if (b.finishedAt !== null) return 1;
+      return progress(b) - progress(a) || a.id - b.id;
+    })
+    .map((k) => k.id);
 }
 
 export function createRace(config: RaceConfig, track: Track): Race {
   const rng = makeRng(config.seed);
   const board = createBoard(rng, track);
-  const kartCount = 1; // phase 2 adds bots
+  const bots = Math.max(0, Math.min(7, Math.floor(config.bots)));
   let nextTicketNumber = 1;
   const karts: KartRuntime[] = [];
-  for (let id = 0; id < kartCount; id++) {
-    const slot = gridSlot(track, id);
+  for (let id = 0; id <= bots; id++) {
+    // The bots fill the grid from the front; the player starts behind them.
+    const slot = gridSlot(id === 0 ? bots : id - 1, track);
     karts.push({
       id,
       kart: spawnKart(track, slot.s, slot.lateral),
@@ -157,12 +179,16 @@ export function respawn(race: Race, kartId: number): RaceEvent[] {
 function substep(race: Race, inputs: readonly KartInput[], h: number, events: RaceEvent[]): void {
   race.time += h;
   const { track } = race;
-  for (const k of race.karts) {
-    const input = (k.finishedAt === null ? inputs[k.id] : undefined) ?? NO_INPUT;
-    const prev = k.proj;
-    const prevSurface = surfaceAt(prev, track);
 
-    let kart = stepKart(k.kart, input, h, prevSurface);
+  // 1. Move every kart.
+  const prevProj = race.karts.map((k) => k.proj);
+  const kartInputs = race.karts.map(
+    (k) => (k.finishedAt === null ? inputs[k.id] : undefined) ?? NO_INPUT,
+  );
+  race.karts.forEach((k, i) => {
+    const prev = prevProj[i] as Projection;
+    const input = kartInputs[i] as KartInput;
+    let kart = stepKart(k.kart, input, h, surfaceAt(prev, track));
     let proj = track.project(kart.pos, prev.s);
     const constrained = constrainToTrack(kart, proj, track);
     if (constrained !== kart) {
@@ -171,6 +197,32 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
     }
     k.kart = kart;
     k.proj = proj;
+  });
+
+  // 2. Kart-to-kart contact, among the karts still racing. A push can move a
+  // kart into a wall, so constrain the pushed karts again.
+  const racing = race.karts.filter((k) => k.finishedAt === null);
+  const before = racing.map((k) => k.kart);
+  resolveContacts(racing);
+  racing.forEach((k, i) => {
+    if (k.kart === before[i]) return;
+    const prev = prevProj[k.id] as Projection;
+    let proj = track.project(k.kart.pos, prev.s);
+    const constrained = constrainToTrack(k.kart, proj, track);
+    if (constrained !== k.kart) {
+      k.kart = constrained;
+      proj = track.project(k.kart.pos, prev.s);
+    }
+    k.proj = proj;
+  });
+
+  // 3. Rules: laps, gates, pit, SLA, respawn. A reshuffle waits for the end of
+  // the substep, so every kart in this substep sees the same board.
+  const passedRows: number[] = [];
+  race.karts.forEach((k, i) => {
+    const prev = prevProj[i] as Projection;
+    const input = kartInputs[i] as KartInput;
+    const proj = k.proj;
     const surface = surfaceAt(proj, track);
 
     // Laps.
@@ -185,12 +237,12 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
       }
     }
     k.lap = lap.state;
-    if (k.finishedAt !== null) continue;
+    if (k.finishedAt !== null) return;
 
     // Gate rows.
-    race.board.forEach((row, i) => {
-      if (i === k.lastGateRow || !crossedForward(row.s, prev.s, proj.s, track.length)) return;
-      k.lastGateRow = i;
+    race.board.forEach((row, ri) => {
+      if (ri === k.lastGateRow || !crossedForward(row.s, prev.s, proj.s, track.length)) return;
+      k.lastGateRow = ri;
       const slot = slotAt(row, proj.lateral);
       if (slot) {
         if (slot.op === nextStep(k.ticket)) {
@@ -201,11 +253,7 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
           events.push({ type: 'wrong-gate', kartId: k.id, op: slot.op });
         }
       }
-      if (k.id === race.playerId) {
-        const { board, rows } = reshuffleAfterPass(race.board, i, race.rng);
-        race.board = board;
-        if (rows.length > 0) events.push({ type: 'board-reshuffled', rows });
-      }
+      if (k.id === race.playerId) passedRows.push(ri);
     });
 
     // Pit: the pit box serves a PIT step, once per ticket.
@@ -238,6 +286,13 @@ function substep(race: Race, inputs: readonly KartInput[], h: number, events: Ra
     if (k.offroadTime > TUNING.offroadRespawn || k.stuckTime > TUNING.stuckRespawn) {
       events.push(...respawn(race, k.id));
     }
+  });
+
+  // 4. The change board moves behind the player.
+  for (const ri of passedRows) {
+    const { board, rows } = reshuffleAfterPass(race.board, ri, race.rng);
+    race.board = board;
+    if (rows.length > 0) events.push({ type: 'board-reshuffled', rows });
   }
 }
 
