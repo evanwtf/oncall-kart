@@ -45,15 +45,15 @@ export function floorTexture(): THREE.CanvasTexture {
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const vent = (i * 7 + j * 3) % 11 === 0;
-        ctx.fillStyle = vent ? '#2b3a4a' : (i + j) % 2 ? '#3a4656' : '#36414f';
+        ctx.fillStyle = vent ? '#3a4d62' : (i + j) % 2 ? '#4d5d72' : '#48576b';
         ctx.fillRect(i * t, j * t, t, t);
         if (vent) {
-          ctx.fillStyle = '#1c2632';
+          ctx.fillStyle = '#26323f';
           for (let k = 6; k < t - 6; k += 6) ctx.fillRect(i * t + 6, j * t + k, t - 12, 2);
         }
       }
     }
-    ctx.strokeStyle = '#1a212b';
+    ctx.strokeStyle = '#263140';
     ctx.lineWidth = 3;
     for (let i = 0; i <= n; i++) {
       ctx.beginPath();

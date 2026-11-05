@@ -22,7 +22,7 @@ export interface SceneHandle {
   readonly renderer: THREE.WebGLRenderer;
 }
 
-const FOG = 0x0a1422;
+const FOG = 0x22385a;
 
 interface Pose {
   x: number;
@@ -43,11 +43,11 @@ export function createScene(canvas: HTMLCanvasElement, initial: Race): SceneHand
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(FOG);
-  scene.fog = new THREE.Fog(FOG, 40, 170);
+  scene.fog = new THREE.Fog(FOG, 60, 190);
 
   // Cold-aisle light: blue from above, dark floor bounce, one cool key light.
-  scene.add(new THREE.HemisphereLight(0x7fb2ff, 0x1a2230, 1.6));
-  const key = new THREE.DirectionalLight(0xdfeaff, 1.4);
+  scene.add(new THREE.HemisphereLight(0xa8c8ff, 0x3a4658, 3.4));
+  const key = new THREE.DirectionalLight(0xffffff, 2.8);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.left = -20;

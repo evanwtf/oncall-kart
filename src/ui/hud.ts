@@ -1,4 +1,5 @@
 import type { Race, RaceEvent } from '../logic/race';
+import { STEP_COLORS } from '../logic/ops';
 import { nextStep } from '../logic/ticket';
 
 /** m:ss.t */
@@ -79,8 +80,21 @@ export function createHud(root: HTMLElement): Hud {
             const li = document.createElement('li');
             const state = i < t.stepIndex ? 'done' : i === t.stepIndex ? 'next' : 'pending';
             li.className = `step ${state}`;
-            const mark = state === 'done' ? '✓' : state === 'next' ? '▶' : '·';
-            li.textContent = `${mark} ${s === 'PIT' ? `PIT: ${t.type.pitWork ?? 'hands-on work'}` : s}`;
+            const mark = document.createElement('span');
+            mark.className = 'mark';
+            mark.textContent = state === 'done' ? '✓' : state === 'next' ? '▶' : '·';
+            const name = document.createElement('span');
+            name.className = 'op';
+            name.textContent = s;
+            // The next step wears its gate color, so the player knows what to look for.
+            if (state === 'next') name.style.background = STEP_COLORS[s];
+            li.append(mark, name);
+            if (s === 'PIT') {
+              const work = document.createElement('span');
+              work.className = 'work';
+              work.textContent = t.type.pitWork ?? 'hands-on work';
+              li.append(work);
+            }
             return li;
           }),
         );

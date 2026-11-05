@@ -1,11 +1,14 @@
 :root {
-  --bg: #0a1422;
+  --bg: #22385a;
   --ink: #e6edf3;
   --dim: #8b9bb0;
   --amber: #f2a03d;
   --green: #3ddc97;
   --red: #e15554;
   --panel: rgba(10, 16, 26, 0.82);
+  /* Done and pending runbook steps: greys, never a gate color. */
+  --step-done: #6b7a8c;
+  --step-pending: #a7b4c4;
   font-family:
     system-ui,
     -apple-system,
@@ -276,22 +279,44 @@ body {
 }
 
 .step {
-  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step .mark {
+  width: 1em;
+  text-align: center;
+}
+
+.step .work {
+  font-size: 13px;
+  color: var(--step-pending);
 }
 
 .step.done {
-  color: var(--green);
-  opacity: 0.7;
+  color: var(--step-done);
+  text-decoration: line-through;
 }
 
 .step.next {
-  color: var(--amber);
   font-weight: 800;
   font-size: 18px;
+  color: var(--ink);
+}
+
+.step.next .op {
+  color: #0d1117;
+  padding: 1px 8px;
+  border-radius: 5px;
+}
+
+.step.next .work {
+  color: var(--ink);
 }
 
 .step.pending {
-  color: var(--dim);
+  color: var(--step-pending);
 }
 
 .sla {

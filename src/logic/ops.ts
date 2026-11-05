@@ -25,3 +25,19 @@ export const OP_INFO: Record<Op, string> = {
   'META-SYNC': 'Pull the latest server metadata (hostname, serial, MACs) upstream',
   REIMAGE: 'Reinstall the OS',
 };
+
+/**
+ * One color per step, so a gate reads at a glance and the HUD matches it.
+ * The HUD marks done and pending steps in greys, never in these hues.
+ */
+export const STEP_COLORS: Record<Step, string> = {
+  MAINT: '#4d9de0',
+  TAKEDOWN: '#e15554',
+  POWERON: '#3ddc97',
+  REINSTATE: '#f2c14e',
+  'FW-ISO': '#b084f5',
+  LOGCOLLECT: '#2ec4b6',
+  'META-SYNC': '#f78fb3',
+  REIMAGE: '#ff8c42',
+  PIT: '#e8eef5',
+};

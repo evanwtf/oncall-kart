@@ -1,25 +1,13 @@
 import * as THREE from 'three';
 import type { Board } from '../logic/board';
-import type { Op } from '../logic/ops';
+import { STEP_COLORS, type Op } from '../logic/ops';
 import type { Track } from '../logic/track';
-
-/** One color per operation, so a label reads at a glance. */
-export const OP_COLORS: Record<Op, string> = {
-  MAINT: '#4d9de0',
-  TAKEDOWN: '#e15554',
-  POWERON: '#3ddc97',
-  REINSTATE: '#f2c14e',
-  'FW-ISO': '#b084f5',
-  LOGCOLLECT: '#2ec4b6',
-  'META-SYNC': '#f78fb3',
-  REIMAGE: '#ff8c42',
-};
 
 interface SlotView {
   canvas: HTMLCanvasElement;
   op: Op;
   texture: THREE.CanvasTexture;
-  beam: THREE.MeshStandardMaterial;
+  beam: THREE.MeshBasicMaterial;
 }
 
 export interface GatesHandle {
@@ -33,25 +21,41 @@ export interface GatesHandle {
 
 const HEIGHT = 3.4;
 
+/** The label canvas, in pixels. The plane keeps the same 8:3 shape. */
+const LABEL_W = 512;
+const LABEL_H = 192;
+/** Label width in metres: wider than a 3-gate arch, so it reads from 50 m. */
+const LABEL_METRES = 5.4;
+
 function drawLabel(canvas: HTMLCanvasElement, op: Op): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const { width: w, height: h } = canvas;
-  ctx.fillStyle = '#0d1117';
+  ctx.fillStyle = STEP_COLORS[op];
   ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = OP_COLORS[op];
-  ctx.fillRect(0, 0, w, 10);
-  ctx.fillRect(0, h - 10, w, 10);
-  ctx.fillStyle = '#ffffff';
-  let size = 92;
-  ctx.font = `bold ${size}px ui-monospace, Menlo, Consolas, monospace`;
-  while (ctx.measureText(op).width > w - 30 && size > 30) {
+  ctx.strokeStyle = '#0d1117';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, w - 10, h - 10);
+  ctx.fillStyle = '#0d1117';
+  // Tall letters read farther than wide ones: squeeze long words sideways
+  // (down to 62%) before making them smaller.
+  let size = 140;
+  const font = (px: number) =>
+    `900 ${px}px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+  ctx.font = font(size);
+  const room = w - 36;
+  while (ctx.measureText(op).width * 0.62 > room && size > 40) {
     size -= 4;
-    ctx.font = `bold ${size}px ui-monospace, Menlo, Consolas, monospace`;
+    ctx.font = font(size);
   }
+  const squeeze = Math.min(1, room / ctx.measureText(op).width);
+  ctx.save();
+  ctx.translate(w / 2, h / 2 + size * 0.04);
+  ctx.scale(squeeze, 1);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(op, w / 2, h / 2 + 4);
+  ctx.fillText(op, 0, 0);
+  ctx.restore();
 }
 
 export function buildGates(track: Track, board: Board): GatesHandle {
@@ -82,28 +86,30 @@ export function buildGates(track: Track, board: Board): GatesHandle {
         post.position.set(slot.lateral + side * slot.halfWidth, HEIGHT / 2, 0);
         rowGroup.add(post);
       }
-      const beamMat = new THREE.MeshStandardMaterial({ color: OP_COLORS[slot.op], roughness: 0.5 });
+      // Unlit, so the hue stays true under the hall lights.
+      const beamMat = new THREE.MeshBasicMaterial({ color: STEP_COLORS[slot.op] });
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.position.set(slot.lateral, HEIGHT, 0);
       rowGroup.add(beam);
 
       const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 128;
+      canvas.width = LABEL_W;
+      canvas.height = LABEL_H;
       drawLabel(canvas, slot.op);
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = 4;
-      const labelGeo = new THREE.PlaneGeometry(w, w / 4);
+      const lw = Math.max(w, LABEL_METRES);
+      const lh = (lw * LABEL_H) / LABEL_W;
+      const labelGeo = new THREE.PlaneGeometry(lw, lh);
       const labelMat = new THREE.MeshBasicMaterial({ map: texture });
       disposables.push(texture, labelGeo, labelMat, beamMat);
-      // Front faces the approaching kart (local -z); back faces away.
-      for (const facing of [-1, 1]) {
-        const label = new THREE.Mesh(labelGeo, labelMat);
-        label.position.set(slot.lateral, HEIGHT + 0.45 + w / 8, facing * 0.2);
-        label.rotation.y = facing < 0 ? Math.PI : 0;
-        rowGroup.add(label);
-      }
+      // One-sided, facing the approaching kart (local -z): a row on another
+      // part of the track cannot be read across the infield.
+      const label = new THREE.Mesh(labelGeo, labelMat);
+      label.position.set(slot.lateral, HEIGHT + 0.45 + lh / 2, -0.2);
+      label.rotation.y = Math.PI;
+      rowGroup.add(label);
       rowViews.push({ canvas, op: slot.op, texture, beam: beamMat });
     }
     views.push(rowViews);
@@ -120,7 +126,7 @@ export function buildGates(track: Track, board: Board): GatesHandle {
         drawLabel(v.canvas, slot.op);
         v.op = slot.op;
         v.texture.needsUpdate = true;
-        v.beam.color.set(OP_COLORS[slot.op]);
+        v.beam.color.set(STEP_COLORS[slot.op]);
       });
     },
     sync(b: Board) {

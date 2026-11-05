@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { OP_INFO, OPS } from '../src/logic/ops';
+import { readFileSync } from 'node:fs';
+import { OP_INFO, OPS, STEP_COLORS } from '../src/logic/ops';
 import { TICKET_TYPES } from '../src/logic/runbooks';
 
 describe('runbooks', () => {
@@ -33,5 +34,26 @@ describe('runbooks', () => {
   it('describes every operation', () => {
     expect(Object.keys(OP_INFO).sort()).toEqual([...OPS].sort());
     expect(OP_INFO.TAKEDOWN).toBe('Maintenance plus power off');
+  });
+});
+
+describe('step colors', () => {
+  it('gives every step its own color', () => {
+    const keys = Object.keys(STEP_COLORS).sort();
+    expect(keys).toEqual([...OPS, 'PIT'].sort());
+    const colors = Object.values(STEP_COLORS).map((c) => c.toLowerCase());
+    expect(new Set(colors).size).toBe(colors.length);
+  });
+
+  it('keeps the HUD done and pending greys out of the step colors', () => {
+    const css = readFileSync(new URL('../src/ui/style.css', import.meta.url), 'utf8');
+    const grey = (name: string) =>
+      css.match(new RegExp(`--step-${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1];
+    const colors = Object.values(STEP_COLORS).map((c) => c.toLowerCase());
+    for (const name of ['done', 'pending']) {
+      const value = grey(name);
+      expect(value, name).toBeDefined();
+      expect(colors).not.toContain(value?.toLowerCase());
+    }
   });
 });

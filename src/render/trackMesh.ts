@@ -57,11 +57,11 @@ export function buildTrackMesh(track: Track): THREE.Group {
 
   // Road: dark epoxy with a faint centre line.
   const roadTex = canvasTexture(64, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#20262e';
+    ctx.fillStyle = '#323b47';
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#2a323c';
+    ctx.fillStyle = '#3d4754';
     for (let i = 0; i < 40; i++) ctx.fillRect((i * 37) % w, (i * 91) % h, 2, 2);
-    ctx.fillStyle = '#4b5a6a';
+    ctx.fillStyle = '#8fa3b8';
     ctx.fillRect(0, h / 2 - 2, w / 2, 4);
   });
   roadTex.wrapS = THREE.RepeatWrapping;
