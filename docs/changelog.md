@@ -7,16 +7,22 @@ Touch controls: the game plays on a phone or a tablet.
 - On a touchscreen, on-screen controls show on the track. The left half of
   the screen steers: put a thumb down and drag left or right. DRIFT and
   BRAKE sit at the bottom right, and the pause button at the top right.
-  Desktop play with a mouse and keyboard does not change.
+  Keyboard play does not change.
+- The last device used wins. A touch shows the controls; a driving key
+  hides them and stops auto-gas, so a touchscreen laptop or a tablet with a
+  keyboard keeps the keyboard brake.
 - Auto-gas is on by default for touch: the kart drives unless you hold
   BRAKE. The pause menu turns it off; GAS then shows as a hold button. The
   choice is saved in the browser.
 - The pause menu on touch also has Respawn, since there is no R key.
-- Every menu takes taps and mouse clicks. Setup and the shift report have
-  Start and Back buttons. In the pause menu, tap an option to select it and
-  tap it again to confirm.
-- Phones get a smaller HUD, a lower pixel ratio and no shadows. Portrait
-  works, with a wider camera and a hint to turn the phone sideways.
+- Every menu takes taps and mouse clicks. Setup has Back and Start buttons;
+  the shift report has Setup and Race again. In the pause menu, tap an
+  option to select it and tap it again to confirm.
+- Phones get a smaller HUD, a lower pixel ratio and no shadows. On a short
+  landscape screen the ticket card shows only the next step, so the gate
+  signs stay in view. The pause menu hides the ticket card and the speed.
+  Portrait works, with a wider camera and a hint to turn the screen
+  sideways.
 - Page zoom, scroll, text selection and the long-press callout are off.
 - Smoke tests now also run on a phone in landscape, in WebKit and Chromium.
 

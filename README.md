@@ -33,7 +33,8 @@ with WebGL 2, on a desktop, a phone or a tablet.
 | Enter     | Confirm        |
 
 On a phone or a tablet, on-screen controls show on the track. Turn the
-phone sideways for the best view.
+screen sideways for the best view. A driving key hides them again and hands
+control back to the keyboard.
 
 | Control                     | Action                                      |
 | --------------------------- | ------------------------------------------- |
