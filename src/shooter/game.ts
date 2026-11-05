@@ -68,6 +68,8 @@ export interface ShooterHooks {
   fire?(on: boolean): void;
   /** Only with ?debug=1: turn the view to look at a point on the floor. */
   lookAt?(x: number, z: number): void;
+  /** Only with ?debug=1: no more vendor arrivals this shift, for tests of the work alone. */
+  stopArrivals?(): void;
   /** Only with ?debug=1: stand 0.8 m in front of a target, looking at it. */
   faceTarget?(id: string): void;
   /** Only with ?debug=1: break a rack now with a ticket of this type. */
@@ -417,6 +419,9 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     };
     hooks.fire = (on: boolean) => {
       heldFire = on;
+    };
+    hooks.stopArrivals = () => {
+      shift.nextArrival = shift.arrivals.length;
     };
     hooks.lookAt = (x: number, z: number) => {
       const yaw = yawToward(shift.player.x, shift.player.z, x, z);

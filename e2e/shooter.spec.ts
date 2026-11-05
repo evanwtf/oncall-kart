@@ -158,6 +158,10 @@ test('every patch applied and nothing broken: a clean shift', async ({ page }) =
   const errors = trackErrors(page);
   await open(page);
   await start(page);
+  // This test is about the runbooks and the patches. Vendors slow the work to
+  // 10%, and on slow software GL the shift would not fit in the test timeout.
+  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).stopArrivals?.());
+  expect(await page.evaluate(() => (window.__oncallShooter as ShooterHooks).vendors())).toEqual([]);
   const patches = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).patches());
   expect(patches).toHaveLength(3);
   for (const p of patches) {
