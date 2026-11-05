@@ -212,12 +212,14 @@ export function createScene(
         key.position.set(pose.x + 10, 30, pose.z + 6);
         key.target.position.set(pose.x, 0, pose.z);
       }
-      if (shake > 0) {
+      // No shake while paused: it would walk the camera off at random.
+      if (shake > 0 && !paused) {
         shake = Math.max(0, shake - dt);
         chase.camera.position.x += (Math.random() - 0.5) * shake * 0.8;
         chase.camera.position.y += (Math.random() - 0.5) * shake * 0.8;
       }
-      hall.update(now / 1000);
+      // The LEDs flicker at random: hold them still on the pause screen.
+      if (!paused) hall.update(now / 1000);
       renderer.render(scene, chase.camera);
 
       // Name tags: project a point above each kart to the canvas.
