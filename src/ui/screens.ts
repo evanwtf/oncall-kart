@@ -1,6 +1,7 @@
 import type { Action } from '../input';
 import { DRIVERS } from '../logic/drivers';
 import type { Race, RaceEvent } from '../logic/race';
+import { gameUrl } from '../picker';
 import { createHud, formatTime, ordinal, type TagPos } from './hud';
 
 export type Screen = 'title' | 'setup' | 'countdown' | 'racing' | 'paused' | 'results';
@@ -133,6 +134,10 @@ export function createUi(root: HTMLElement, handlers: UiHandlers): Ui {
   el('p', 'hint only-touch', 'Left thumb steers · DRIFT, BRAKE and ITEM on the right', title);
   el('p', 'version', `v${__APP_VERSION__}`, title);
   onTap(title, () => handlers.action('confirm'));
+  // Back to the start screen. onTap stops the click, so the title's own tap does not fire.
+  onTap(button('switch-game', 'Switch game', title), () =>
+    window.location.assign(gameUrl(window.location.href, null)),
+  );
 
   // Setup.
   const setup = el('div', 'screen setup', undefined, panels);

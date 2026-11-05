@@ -147,7 +147,7 @@ test('touch: tap through the menus, race with auto-gas, steer, pause, rotate', a
   });
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/oncall-kart/?seed=1&debug=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1&debug=1');
   await expect.poll(() => screen(page)).toBe('title');
   await expect(page.locator('.title .prompt.only-touch')).toBeVisible();
 
@@ -272,7 +272,7 @@ test('touch: a short landscape screen, auto-gas off, the tallest ticket', async 
   page.on('pageerror', (err) => errors.push(err.message));
   await page.addInitScript(() => localStorage.setItem('oncall-kart.autoGas', 'off'));
   await page.setViewportSize({ width: 667, height: 331 });
-  await page.goto('/oncall-kart/?seed=1&debug=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1&debug=1');
   await tapToRace(page);
 
   await expect(page.locator('.touch-gas')).toBeVisible();
@@ -323,7 +323,7 @@ test('touch: the first tap starts sound; Sound in the pause menu mutes across a 
       muted: window.__oncallKart?.muted(),
     }));
 
-  await page.goto('/oncall-kart/?seed=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1');
   await expect.poll(() => screen(page)).toBe('title');
   expect(await audio()).toEqual({ state: 'locked', muted: false });
   await tapToRace(page);

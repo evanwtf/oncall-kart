@@ -1,7 +1,10 @@
 import { startGame } from './game';
+import { parseGame, showPicker } from './picker';
+import { startShooter } from './shooter/game';
 import { showNoWebGl } from './ui/screens';
 import './ui/style.css';
 import './ui/touch.css';
+import './ui/picker.css';
 
 function hasWebGl2(): boolean {
   try {
@@ -17,6 +20,11 @@ function hasWebGl2(): boolean {
 const canvas = document.getElementById('game');
 const ui = document.getElementById('ui');
 if (canvas instanceof HTMLCanvasElement && ui) {
-  if (hasWebGl2()) startGame(canvas, ui);
-  else showNoWebGl(ui);
+  if (!hasWebGl2()) showNoWebGl(ui);
+  else {
+    const game = parseGame(window.location.search);
+    if (game === 'kart') startGame(canvas, ui);
+    else if (game === 'shooter') startShooter(canvas, ui);
+    else showPicker(ui);
+  }
 }

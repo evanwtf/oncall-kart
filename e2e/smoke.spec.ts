@@ -31,7 +31,7 @@ test('a race starts, drives, pauses, restarts and resizes without errors', async
   });
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/oncall-kart/?seed=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1');
   await expect(page.locator('#ui')).toContainText(`v${pkg.version}`);
   await expect.poll(() => screen(page)).toBe('title');
 
@@ -155,7 +155,7 @@ test('items, a Page, and the results of an 8-kart race', async ({ page }) => {
     }
   };
 
-  await page.goto('/oncall-kart/?seed=3&debug=1');
+  await page.goto('/oncall-kart/?game=kart&seed=3&debug=1');
   await expect.poll(() => screen(page)).toBe('title');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
@@ -201,7 +201,7 @@ function trackErrors(page: Page): string[] {
 }
 
 async function startRace(page: Page) {
-  await page.goto('/oncall-kart/?seed=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1');
   await expect.poll(() => screen(page)).toBe('title');
   await page.keyboard.press('Enter');
   await expect.poll(() => screen(page)).toBe('setup');
@@ -289,7 +289,7 @@ test('a new pixel ratio resizes the renderer', async ({ page }) => {
       return mql;
     };
   });
-  await page.goto('/oncall-kart/?seed=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1');
   await expect.poll(() => screen(page)).toBe('title');
   const sample = () =>
     page.evaluate(() => {
@@ -329,7 +329,7 @@ test('sound starts on the first key press, and M mutes across a reload', async (
       state: window.__oncallKart?.audioState(),
       muted: window.__oncallKart?.muted(),
     }));
-  await page.goto('/oncall-kart/?seed=1');
+  await page.goto('/oncall-kart/?game=kart&seed=1');
   await expect.poll(() => screen(page)).toBe('title');
   // Nothing before a gesture: Safari would block it.
   expect(await audio()).toEqual({ state: 'locked', muted: false });
@@ -363,5 +363,31 @@ test('sound starts on the first key press, and M mutes across a reload', async (
   await expect(sound).toHaveText('Sound: On');
   expect((await audio()).muted).toBe(false);
   await expect(page.locator('.mute-icon')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('the start screen picks a game, and the kart title switches back', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  await page.goto('/oncall-kart/?seed=1');
+  const cards = page.locator('button[data-game]');
+  await expect(cards).toHaveCount(2);
+  await expect(page.locator('button[data-game="kart"]')).toBeVisible();
+  await expect(page.locator('button[data-game="shooter"]')).toBeVisible();
+
+  await page.locator('button[data-game="kart"]').click();
+  // The click loads a new page: wait for it before reading its hooks.
+  await page.waitForURL(/game=kart/);
+  await page.waitForFunction(() => window.__oncallKart !== undefined);
+  await expect.poll(() => screen(page)).toBe('title');
+  expect(new URL(page.url()).searchParams.get('game')).toBe('kart');
+  expect(new URL(page.url()).searchParams.get('seed')).toBe('1');
+
+  // Switch game goes back to the start screen and keeps the other params.
+  await page.locator('.switch-game').click();
+  await page.waitForURL((u) => !u.searchParams.has('game'));
+  await expect(cards).toHaveCount(2);
+  expect(new URL(page.url()).searchParams.has('game')).toBe(false);
+  expect(new URL(page.url()).searchParams.get('seed')).toBe('1');
   expect(errors).toEqual([]);
 });
