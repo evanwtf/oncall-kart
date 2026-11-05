@@ -26,6 +26,11 @@ export interface Audio {
 /** Bus gains. The music sits 6 dB under the effects. */
 export const SFX_GAIN = 1;
 export const MUSIC_GAIN = 0.5;
+/**
+ * Master gain when the sound is on. The limiter adds make-up gain, so this
+ * trims the output back to leave headroom under 0 dBFS.
+ */
+export const MASTER_GAIN = 0.6;
 /** The music under a pause, as a share of MUSIC_GAIN. */
 export const DUCK = 0.25;
 
@@ -81,7 +86,7 @@ export function buildGraph(ctx: BaseAudioContext, muted: boolean): Graph {
   limiter.attack.value = 0.003;
   limiter.release.value = 0.15;
   const master = ctx.createGain();
-  master.gain.value = muted ? 0 : 1;
+  master.gain.value = muted ? 0 : MASTER_GAIN;
   sfx.connect(limiter);
   music.connect(limiter);
   limiter.connect(master);
@@ -220,7 +225,7 @@ export function createAudio(factory: () => AudioContext | null = defaultFactory)
     },
     setMuted(m) {
       muted = m;
-      if (ctx && graph) setNow(graph.master.gain, m ? 0 : 1, ctx.currentTime);
+      if (ctx && graph) setNow(graph.master.gain, m ? 0 : MASTER_GAIN, ctx.currentTime);
       engine?.setOn(engineOn());
     },
     muted: () => muted,

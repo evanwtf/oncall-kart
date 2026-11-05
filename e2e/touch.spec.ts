@@ -306,3 +306,44 @@ test('touch: a short landscape screen, auto-gas off, the tallest ticket', async 
   await shot(page, '667x331-pause');
   expect(errors).toEqual([]);
 });
+
+test('touch: the first tap starts sound; Sound in the pause menu mutes across a reload', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+  page.on('pageerror', (err) => errors.push(err.message));
+  const audio = () =>
+    page.evaluate(() => ({
+      state: window.__oncallKart?.audioState(),
+      muted: window.__oncallKart?.muted(),
+    }));
+
+  await page.goto('/oncall-kart/?seed=1');
+  await expect.poll(() => screen(page)).toBe('title');
+  expect(await audio()).toEqual({ state: 'locked', muted: false });
+  await tapToRace(page);
+  const allowed = browserName === 'webkit' ? ['running', 'suspended'] : ['running'];
+  await expect.poll(async () => allowed.includes((await audio()).state ?? '')).toBe(true);
+
+  await page.locator('.touch-pause').tap();
+  await expect.poll(() => screen(page)).toBe('paused');
+  const sound = page.locator('.menu-item', { hasText: 'Sound' });
+  await expect(sound).toHaveText('Sound: On');
+  // Tap to select, tap again to confirm.
+  await sound.tap();
+  await sound.tap();
+  await expect(sound).toHaveText('Sound: Off');
+  expect((await audio()).muted).toBe(true);
+  await expectPauseLayout(page);
+
+  await page.reload();
+  await expect.poll(() => screen(page)).toBe('title');
+  expect((await audio()).muted).toBe(true);
+  await expect(page.locator('.mute-icon')).toBeVisible();
+  expect(errors).toEqual([]);
+});

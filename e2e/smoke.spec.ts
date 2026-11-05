@@ -240,11 +240,15 @@ test('the race keeps rendering after WebGL context loss and restore', async ({ p
     }));
   await expect.poll(async () => (await sample()).lost, { timeout: 10_000 }).toBe(false);
   const a = await sample();
-  await holdUp(page, 1000);
-  const b = await sample();
-  expect(b.calls).toBeGreaterThan(0);
-  expect(b.time).toBeGreaterThan(a.time + 0.5);
-  expect(await speed(page)).toBeGreaterThan(1);
+  // Software GL recompiles every shader after a restore, so the first frames
+  // are slow: wait for the clock rather than for a fixed time.
+  await page.keyboard.down('ArrowUp');
+  await expect
+    .poll(async () => (await sample()).time, { timeout: 15_000 })
+    .toBeGreaterThan(a.time + 0.5);
+  await expect.poll(() => speed(page), { timeout: 15_000 }).toBeGreaterThan(1);
+  await page.keyboard.up('ArrowUp');
+  expect((await sample()).calls).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 
@@ -255,6 +259,11 @@ test('the pause screen is still: no wheels, sparks or lights move', async ({ pag
   await holdUp(page, 1000);
   await page.keyboard.press('KeyP');
   await expect.poll(() => screen(page)).toBe('paused');
+  // Compare the 3D view only: hide the menu and the HUD, whose CSS may animate.
+  await page.evaluate(() => {
+    const ui = document.getElementById('ui');
+    if (ui) ui.style.visibility = 'hidden';
+  });
   await page.waitForTimeout(300);
   const canvas = page.locator('#game');
   const first = await canvas.screenshot();
@@ -306,5 +315,53 @@ test('a new pixel ratio resizes the renderer', async ({ page }) => {
   await expect.poll(async () => (await sample()).buffer).toBe(before.css * next);
   // The game now listens for the next change, from the new ratio.
   expect((await sample()).last).toContain(`${next}dppx`);
+  expect(errors).toEqual([]);
+});
+
+test('sound starts on the first key press, and M mutes across a reload', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  const audio = () =>
+    page.evaluate(() => ({
+      state: window.__oncallKart?.audioState(),
+      muted: window.__oncallKart?.muted(),
+    }));
+  await page.goto('/oncall-kart/?seed=1');
+  await expect.poll(() => screen(page)).toBe('title');
+  // Nothing before a gesture: Safari would block it.
+  expect(await audio()).toEqual({ state: 'locked', muted: false });
+  await expect(page.locator('.mute-icon')).toBeHidden();
+
+  await page.keyboard.press('Enter');
+  await expect.poll(() => screen(page)).toBe('setup');
+  // Headless WebKit may refuse audio output; it must still leave 'locked'.
+  const allowed = browserName === 'webkit' ? ['running', 'suspended'] : ['running'];
+  await expect.poll(async () => allowed.includes((await audio()).state ?? '')).toBe(true);
+
+  await page.keyboard.press('KeyM');
+  await expect.poll(async () => (await audio()).muted).toBe(true);
+  await expect(page.locator('.mute-icon')).toBeVisible();
+  await page.reload();
+  await expect.poll(() => screen(page)).toBe('title');
+  expect(await audio()).toEqual({ state: 'locked', muted: true });
+  await expect(page.locator('.mute-icon')).toBeVisible();
+
+  // The pause menu has a Sound item too, on the keyboard.
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await waitRacing(page);
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => screen(page)).toBe('paused');
+  const sound = page.locator('.menu-item', { hasText: 'Sound' });
+  await expect(sound).toHaveText('Sound: Off');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(sound).toHaveText('Sound: On');
+  expect((await audio()).muted).toBe(false);
+  await expect(page.locator('.mute-icon')).toBeHidden();
   expect(errors).toEqual([]);
 });

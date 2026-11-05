@@ -31,6 +31,7 @@ with WebGL 2, on a desktop, a phone or a tablet.
 | Shift / E | Use item       |
 | R         | Respawn        |
 | P / Esc   | Pause          |
+| M         | Sound on, off  |
 | Enter     | Confirm        |
 
 On a phone or a tablet, on-screen controls show on the track. Turn the
@@ -46,10 +47,15 @@ control back to the keyboard.
 | GAS (hold, above BRAKE)     | Accelerate, when auto-gas is off            |
 | II (top right)              | Pause                                       |
 | Pause menu                  | Respawn; auto-gas on or off (on by default) |
+| Pause menu: Sound           | Sound on or off                             |
 
 Tap the title to start. On setup, tap the laps and a driver, then Start.
 In the pause menu, tap an option to select it and tap it again to confirm.
 Mouse clicks work the same way.
+
+The sound starts on your first key press or tap: browsers block sound
+before one. M, or Sound in the pause menu, turns it off and on. The game
+remembers the choice, and shows a muted-speaker mark while the sound is off.
 
 In menus, the arrow keys choose, Enter confirms and Esc goes back. Pick
 1, 3 or 10 laps and a driver on the setup screen. The ticket card (top

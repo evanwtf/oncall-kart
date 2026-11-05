@@ -26,3 +26,5 @@ The three hazards. Shipped in 0.3.0. Plan:
 ## Phase 3: sound and polish
 
 Synthesized sound and an original tune. Art polish and a tuning pass.
+Shipped in 0.4.0. Plan:
+[superpowers/plans/2026-11-04-oncall-kart-phase3.md](superpowers/plans/2026-11-04-oncall-kart-phase3.md).

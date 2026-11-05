@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.0
+
+Phase 3: sound, an original tune, and render polish.
+
+- All sound is made in the browser with Web Audio. There are no audio files.
+  Countdown blips, gate chimes, a buzz for a wrong gate, an arpeggio for a
+  closed ticket, a pager beep for an SLA breach, pit ratchets, drift ticks,
+  boost and item sounds, hits, lap chimes, a final-lap call and a finish
+  fanfare that grows with your place. Hits on rivals fade with distance.
+- The engine hums with your speed, and sounds rougher off the road.
+- An original 16-bar tune in D minor loops in the race, in square, triangle
+  and noise voices at 140 BPM. The final lap plays it 8% faster. The title
+  and results screens play a calmer version.
+- The sound starts on the first key press or tap. M mutes, and so does
+  Sound in the pause menu. The game remembers the choice and shows a mark
+  while muted. A pause or a hidden tab ducks the music and stops the engine.
+- Without Web Audio, the game runs silent.
+- The pause screen is still: wheels, sparks and lights stop.
+- A respawn draws the kart at its new spot at once, and the camera snaps
+  there instead of swooping.
+- When the window moves to a display with another pixel ratio, the game
+  redraws at the new ratio.
+- CI refuses an e2e image whose Node major version differs from `.nvmrc`.
+  A smoke test loses and restores the WebGL context and checks the race
+  keeps drawing.
+
 ## 0.3.0
 
 Phase 2: seven bot rivals, items and hazards.

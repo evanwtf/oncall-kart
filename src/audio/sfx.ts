@@ -128,7 +128,7 @@ export function playCue(s: Synth, out: AudioNode, cue: Cue, t: number): void {
         noise(s, out, {
           t: t + i * 0.05,
           dur: 0.025,
-          peak: P * 0.8,
+          peak: P * 0.45,
           filter: 'highpass',
           f0: 2500 + i * 300,
         });
@@ -185,14 +185,14 @@ export function playCue(s: Synth, out: AudioNode, cue: Cue, t: number): void {
         f0: [0, 900, 1250, 1700][cue.stage] ?? 900,
         t,
         dur: 0.05,
-        peak: P * 0.35,
+        peak: P * 0.5,
       });
       break;
     case 'boost':
       noise(s, out, {
         t,
         dur: 0.55,
-        peak: P * 0.7,
+        peak: P * 2,
         filter: 'bandpass',
         f0: 600,
         f1: 4000,
@@ -201,7 +201,7 @@ export function playCue(s: Synth, out: AudioNode, cue: Cue, t: number): void {
       });
       break;
     case 'item-pick':
-      tone(s, out, { type: 'square', f0: 1200, f1: 1900, t, dur: 0.08, peak: P * 0.4 });
+      tone(s, out, { type: 'square', f0: 1200, f1: 1900, t, dur: 0.08, peak: P * 0.6 });
       break;
     case 'item-use':
       playItem(s, out, cue.item, t);
@@ -236,7 +236,7 @@ function playItem(s: Synth, out: AudioNode, item: ItemKind, t: number): void {
       noise(s, out, {
         t,
         dur: 0.4,
-        peak: P * 0.7,
+        peak: P * 2,
         filter: 'bandpass',
         f0: 400,
         f1: 3000,

@@ -11,8 +11,8 @@ export interface EngineSound {
 }
 
 /** Gain of the engine at rest and at top speed. */
-const IDLE_GAIN = 0.05;
-const TOP_GAIN = 0.09;
+const IDLE_GAIN = 0.03;
+const TOP_GAIN = 0.055;
 /** Seconds for a parameter to settle: smooth, with no clicks. */
 const GLIDE = 0.06;
 
