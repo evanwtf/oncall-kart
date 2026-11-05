@@ -36,7 +36,8 @@ A second game on the same site. The design is in
 
 1. **Walk and fix:** the start screen that picks the game, the floor,
    movement, servers that break, fixing at the rack, patches, the 3-minute
-   shift, the endings and the shift report. Version 0.5.0.
+   shift, the endings and the shift report. Shipped in 0.5.0. Plan:
+   [superpowers/plans/2026-11-05-oncall-shooter-phase1.md](superpowers/plans/2026-11-05-oncall-shooter-phase1.md).
 2. **Vendors and the money gun:** vendor roles, the slowdown, the gun,
    budget, lures, alarms, the toolkit.
 3. **Sound, touch and polish.**
