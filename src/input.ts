@@ -87,3 +87,34 @@ export function createKeyboard(target: Window): Keyboard {
     },
   };
 }
+
+/** Anything that gives kart input and actions: the keyboard, the touch controls. */
+export interface InputSource {
+  read(): KartInput;
+  takeActions(): Action[];
+  dispose(): void;
+}
+
+/**
+ * Merge input sources. steer: the largest magnitude wins. throttle and brake:
+ * the max. drift: any source. Actions keep source order.
+ */
+export function createInput(sources: readonly InputSource[]): InputSource {
+  return {
+    read: () => {
+      const out: KartInput = { throttle: 0, brake: 0, steer: 0, drift: false };
+      for (const s of sources) {
+        const i = s.read();
+        if (Math.abs(i.steer) > Math.abs(out.steer)) out.steer = i.steer;
+        out.throttle = Math.max(out.throttle, i.throttle);
+        out.brake = Math.max(out.brake, i.brake);
+        out.drift ||= i.drift;
+      }
+      return out;
+    },
+    takeActions: () => sources.flatMap((s) => s.takeActions()),
+    dispose: () => {
+      for (const s of sources) s.dispose();
+    },
+  };
+}
