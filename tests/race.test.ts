@@ -1,0 +1,344 @@
+import { describe, expect, it } from 'vitest';
+import { NO_INPUT, spawnKart, type KartInput } from '../src/logic/kart';
+import type { Op } from '../src/logic/ops';
+import { createRace, respawn, stepRace, type Race, type RaceEvent } from '../src/logic/race';
+import { TICKET_TYPES } from '../src/logic/runbooks';
+import { buildTrack } from '../src/logic/track';
+import { HALL } from '../src/logic/tracks/hall';
+import { TUNING } from '../src/logic/tuning';
+import { scriptedInput } from './driver';
+
+const track = buildTrack(HALL);
+const DT = 1 / 60;
+const GAS: KartInput = { ...NO_INPUT, throttle: 1 };
+
+function newRace(laps: 1 | 3 | 10 = 1, seed = 1): Race {
+  return createRace({ laps, seed, driverColor: 0 }, track);
+}
+
+/** Step through the countdown. */
+function toGo(race: Race): RaceEvent[] {
+  const events: RaceEvent[] = [];
+  while (race.phase === 'countdown') events.push(...stepRace(race, [NO_INPUT], DT));
+  return events;
+}
+
+function player(race: Race) {
+  const k = race.karts[0];
+  if (!k) throw new Error('no player');
+  return k;
+}
+
+/** Put the player just before gate row `row`, in its slot `slot`, with a ticket that wants `want`. */
+function setUpAtRow(race: Race, row: number, slot: number, want: Op | 'other', speed = 15) {
+  const r = race.board[row];
+  const sl = r?.slots[slot];
+  if (!r || !sl) throw new Error('no slot');
+  const type = TICKET_TYPES.find((t) => t.id === 'flapping-nic');
+  if (!type) throw new Error('no type');
+  const p = player(race);
+  // flapping-nic starts with MAINT. Make the slot MAINT, or not MAINT.
+  sl.op = want === 'other' ? 'REIMAGE' : 'MAINT';
+  for (const other of r.slots) if (other !== sl) other.op = 'REIMAGE';
+  p.ticket = { ...p.ticket, type, stepIndex: 0, deadline: race.time + 999 };
+  p.kart = { ...spawnKart(track, r.s - 3, sl.lateral), speed };
+  p.proj = { s: r.s - 3, lateral: sl.lateral };
+}
+
+function driveFor(race: Race, seconds: number, input: KartInput = GAS): RaceEvent[] {
+  const events: RaceEvent[] = [];
+  for (let i = 0; i < Math.round(seconds / DT); i++) events.push(...stepRace(race, [input], DT));
+  return events;
+}
+
+const types = (events: RaceEvent[]) => events.map((e) => e.type);
+
+describe('createRace', () => {
+  it('gives equal state for equal config (fresh state per race)', () => {
+    const a = newRace(3, 7);
+    const b = newRace(3, 7);
+    expect({ ...a, rng: null }).toEqual({ ...b, rng: null });
+  });
+
+  it('starts with a 3 s countdown and one kart holding a ticket', () => {
+    const r = newRace();
+    expect(r.phase).toBe('countdown');
+    expect(r.countdown).toBe(3);
+    expect(r.karts).toHaveLength(1);
+    expect(player(r).ticket.number).toBe(1);
+  });
+
+  it('ignores input until go', () => {
+    const r = newRace();
+    const start = { ...player(r).kart.pos };
+    const events = driveFor(r, 2.9);
+    expect(player(r).kart.pos).toEqual(start);
+    expect(types(events)).not.toContain('go');
+    const more = driveFor(r, 0.2);
+    expect(types(more)).toContain('go');
+    expect(r.phase).toBe('racing');
+  });
+});
+
+describe('gates', () => {
+  it('advances the ticket through the needed gate', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 0, 0, 'MAINT');
+    const ev = driveFor(r, 0.5);
+    expect(ev).toContainEqual({ type: 'step-ok', kartId: 0, step: 'MAINT' });
+    expect(player(r).ticket.stepIndex).toBe(1);
+  });
+
+  it('spins the kart through a wrong gate', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 1, 0, 'other');
+    const ev = driveFor(r, 3 / 120);
+    // Not crossed yet: no event.
+    expect(types(ev)).not.toContain('wrong-gate');
+    let all: RaceEvent[] = [];
+    let spinAtEvent = -1;
+    for (let i = 0; i < 60 && spinAtEvent < 0; i++) {
+      const e = stepRace(r, [GAS], 1 / 120);
+      all = all.concat(e);
+      if (e.some((x) => x.type === 'wrong-gate')) spinAtEvent = player(r).kart.spinTime;
+    }
+    expect(all).toContainEqual({ type: 'wrong-gate', kartId: 0, op: 'REIMAGE' });
+    expect(spinAtEvent).toBeCloseTo(TUNING.wrongGateSpin, 5);
+    expect(player(r).ticket.stepIndex).toBe(0);
+    expect(player(r).stats.wrongGates).toBe(1);
+  });
+
+  it('does nothing in an open lane', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 0, 0, 'MAINT');
+    const row = r.board[0];
+    if (!row) throw new Error('row');
+    const sorted = [...row.slots].sort((a, b) => a.lateral - b.lateral);
+    const [a, b] = sorted;
+    if (!a || !b) throw new Error('slots');
+    const lane = (a.lateral + a.halfWidth + b.lateral - b.halfWidth) / 2;
+    const p = player(r);
+    p.kart = { ...spawnKart(track, row.s - 3, lane), speed: 15 };
+    p.proj = { s: row.s - 3, lateral: lane };
+    const ev = driveFor(r, 0.5);
+    expect(types(ev).filter((t) => t === 'step-ok' || t === 'wrong-gate')).toEqual([]);
+  });
+
+  it('closes the ticket on its last step, boosts, and issues the next ticket', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 0, 0, 'MAINT');
+    const p = player(r);
+    const one = TICKET_TYPES.find((t) => t.id === 'wrong-hostname');
+    if (!one) throw new Error('type');
+    p.ticket = { ...p.ticket, type: one, stepIndex: 0 };
+    const row = r.board[0];
+    if (!row?.slots[0]) throw new Error('slot');
+    row.slots[0].op = 'META-SYNC';
+    const before = p.ticket.number;
+    let ev: RaceEvent[] = [];
+    let boost = 0;
+    for (let i = 0; i < 120; i++) {
+      const e = stepRace(r, [GAS], 1 / 120);
+      ev = ev.concat(e);
+      if (e.some((x) => x.type === 'ticket-closed')) boost = player(r).kart.boostTime;
+    }
+    const t = types(ev);
+    expect(t).toContain('ticket-closed');
+    expect(t.indexOf('ticket-issued')).toBeGreaterThan(t.indexOf('ticket-closed'));
+    expect(boost).toBeCloseTo(TUNING.ticketCloseBoost, 5);
+    expect(player(r).ticket.number).toBe(before + 1);
+    expect(player(r).stats.ticketsClosed).toBe(1);
+  });
+
+  it('reshuffles the row the player passed', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 2, 0, 'MAINT');
+    const ev = driveFor(r, 0.5);
+    expect(ev).toContainEqual({ type: 'board-reshuffled', row: 2 });
+  });
+
+  it('triggers a gate once when the kart wiggles back and forth over the row', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 1, 0, 'other', 6);
+    let ev = driveFor(r, 0.8);
+    expect(types(ev).filter((t) => t === 'wrong-gate')).toHaveLength(1);
+    // Back over the row, then forward again.
+    const p = player(r);
+    const row = r.board[1];
+    const sl = row?.slots[0];
+    if (!row || !sl) throw new Error('row');
+    sl.op = 'REIMAGE';
+    p.kart = { ...spawnKart(track, row.s - 2, sl.lateral), speed: 6 };
+    p.proj = { s: row.s - 2, lateral: sl.lateral };
+    ev = driveFor(r, 1.5);
+    expect(types(ev).filter((t) => t === 'wrong-gate')).toHaveLength(0);
+  });
+});
+
+describe('pit', () => {
+  const pitS = HALL.pit.startS + 2;
+  const enterPit = (r: Race) => {
+    const p = player(r);
+    p.kart = { ...spawnKart(track, pitS, HALL.pit.side * (HALL.halfWidth - 1)), speed: 10 };
+    p.proj = { s: pitS, lateral: HALL.pit.side * (HALL.halfWidth - 1) };
+    // Steer toward the pit side for a moment, then straight.
+    const toward: KartInput = { ...GAS, steer: HALL.pit.side * 0.6 };
+    const ev = driveFor(r, 0.6, toward);
+    return ev.concat(driveFor(r, 0.5, GAS));
+  };
+
+  it('serves a PIT step: hold, event and one advance per ticket', () => {
+    const r = newRace();
+    toGo(r);
+    const p = player(r);
+    const disk = TICKET_TYPES.find((t) => t.id === 'failed-disk');
+    if (!disk) throw new Error('type');
+    p.ticket = { ...p.ticket, type: disk, stepIndex: 1, deadline: 999 };
+    let held = 0;
+    const ev: RaceEvent[] = [];
+    p.kart = { ...spawnKart(track, pitS, HALL.pit.side * (HALL.halfWidth - 1)), speed: 10 };
+    p.proj = { s: pitS, lateral: HALL.pit.side * (HALL.halfWidth - 1) };
+    for (let i = 0; i < 120 * 2 && held === 0; i++) {
+      const e = stepRace(r, [{ ...GAS, steer: HALL.pit.side * 0.6 }], 1 / 120);
+      ev.push(...e);
+      if (e.some((x) => x.type === 'pit-service')) held = player(r).kart.holdTime;
+    }
+    expect(ev).toContainEqual({ type: 'pit-service', kartId: 0, work: 'swap the disk' });
+    expect(held).toBeCloseTo(TUNING.pitHold, 5);
+    expect(player(r).ticket.stepIndex).toBe(2);
+    expect(player(r).pitServedTicket).toBe(p.ticket.number);
+  });
+
+  it('changes nothing when the next step is not PIT', () => {
+    const r = newRace();
+    toGo(r);
+    const p = player(r);
+    const disk = TICKET_TYPES.find((t) => t.id === 'failed-disk');
+    if (!disk) throw new Error('type');
+    p.ticket = { ...p.ticket, type: disk, stepIndex: 0, deadline: 999 };
+    const ev = enterPit(r);
+    expect(types(ev)).not.toContain('pit-service');
+    expect(player(r).ticket.stepIndex).toBe(0);
+    expect(player(r).kart.holdTime).toBe(0);
+  });
+});
+
+describe('SLA', () => {
+  it('pages the kart on breach and issues a new ticket', () => {
+    const r = newRace();
+    toGo(r);
+    const p = player(r);
+    p.ticket = { ...p.ticket, deadline: r.time + 0.05 };
+    const before = p.ticket.number;
+    let slow = 0;
+    const ev: RaceEvent[] = [];
+    for (let i = 0; i < 30; i++) {
+      const e = stepRace(r, [NO_INPUT], 1 / 120);
+      ev.push(...e);
+      if (e.some((x) => x.type === 'sla-breach')) slow = player(r).kart.slowTime;
+    }
+    expect(types(ev)).toContain('sla-breach');
+    expect(slow).toBeCloseTo(TUNING.slaSlow, 5);
+    expect(player(r).ticket.number).toBe(before + 1);
+    expect(player(r).stats.slaBreaches).toBe(1);
+  });
+});
+
+describe('laps', () => {
+  function race(laps: 1 | 3, maxSeconds: number) {
+    const r = newRace(laps, 3);
+    toGo(r);
+    const ev: RaceEvent[] = [];
+    for (let i = 0; i < maxSeconds / DT && r.phase !== 'finished'; i++) {
+      ev.push(...stepRace(r, [scriptedInput(r)], DT));
+    }
+    return { r, ev };
+  }
+
+  it('finishes a 1-lap race with the scripted driver', () => {
+    const { r, ev } = race(1, 180);
+    expect(types(ev)).toContain('finished');
+    expect(r.phase).toBe('finished');
+    expect(player(r).finishedAt).not.toBeNull();
+  });
+
+  it('emits 3 lap events in a 3-lap race', () => {
+    const { ev } = race(3, 500);
+    expect(types(ev).filter((t) => t === 'lap')).toHaveLength(3);
+  });
+});
+
+describe('frame spikes', () => {
+  it('clamps a 2 s frame to 0.1 s', () => {
+    const r = newRace();
+    toGo(r);
+    const t0 = r.time;
+    stepRace(r, [GAS], 2.0);
+    expect(r.time - t0).toBeCloseTo(0.1, 6);
+  });
+
+  it('still triggers a gate crossed inside one big step', () => {
+    const r = newRace();
+    toGo(r);
+    setUpAtRow(r, 0, 0, 'MAINT', 24);
+    const p = player(r);
+    const row = r.board[0];
+    const sl = row?.slots[0];
+    if (!row || !sl) throw new Error('row');
+    p.kart = { ...spawnKart(track, row.s - 1, sl.lateral), speed: 24 };
+    p.proj = { s: row.s - 1, lateral: sl.lateral };
+    const ev = stepRace(r, [GAS], 2.0);
+    expect(ev).toContainEqual({ type: 'step-ok', kartId: 0, step: 'MAINT' });
+  });
+});
+
+describe('respawn', () => {
+  it('puts the kart on the centerline at its s, at rest, held', () => {
+    const r = newRace();
+    toGo(r);
+    const p = player(r);
+    p.kart = { ...spawnKart(track, 300, 11), speed: 12 };
+    p.proj = track.project(p.kart.pos, 300);
+    const s = p.proj.s;
+    const ev = respawn(r, 0);
+    expect(ev).toEqual([{ type: 'respawn', kartId: 0 }]);
+    const q = track.project(player(r).kart.pos, s);
+    expect(q.s).toBeCloseTo(s, 1);
+    expect(q.lateral).toBeCloseTo(0, 3);
+    expect(player(r).kart.speed).toBe(0);
+    expect(player(r).kart.holdTime).toBe(TUNING.respawnHold);
+  });
+
+  it('respawns after too long off-road', () => {
+    const r = newRace();
+    toGo(r);
+    const p = player(r);
+    const lat = -(HALL.halfWidth + 2);
+    p.kart = spawnKart(track, 300, lat);
+    p.proj = track.project(p.kart.pos, 300);
+    const ev = driveFor(r, TUNING.offroadRespawn + 0.2, NO_INPUT);
+    expect(types(ev)).toContain('respawn');
+  });
+
+  it('respawns when stuck under throttle', () => {
+    const r = newRace();
+    toGo(r);
+    const p = player(r);
+    p.kart = spawnKart(track, 300, 0);
+    p.proj = track.project(p.kart.pos, 300);
+    // Something holds the kart at rest (walls deflect, so pin it by hand).
+    const ev: RaceEvent[] = [];
+    for (let i = 0; i < (TUNING.stuckRespawn + 0.3) * 120; i++) {
+      player(r).kart.speed = 0;
+      ev.push(...stepRace(r, [GAS], 1 / 120));
+    }
+    expect(types(ev)).toContain('respawn');
+    expect(player(r).offroadTime).toBe(0);
+  });
+});

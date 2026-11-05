@@ -47,6 +47,27 @@ export const TUNING = {
   boostAccel: 30,
   slowFactor: 0.6,
   spinDecel: 18,
+
+  // Race.
+  countdown: 3,
+  /** Spin after a wrong gate: the time penalty. */
+  wrongGateSpin: 0.6,
+  ticketCloseBoost: 1.2,
+  /** Time held in the pit while the tech works. */
+  pitHold: 2,
+  /** Slowdown after an SLA breach. */
+  slaSlow: 2.5,
+  respawnHold: 0.8,
+  /** Seconds off the road before an automatic respawn. */
+  offroadRespawn: 4,
+  /** Seconds under throttle at near-zero speed before an automatic respawn. */
+  stuckRespawn: 2.5,
+  /** Below this speed (m/s) a kart under throttle counts as stuck. */
+  stuckSpeed: 1,
+  /** Largest frame the logic accepts; a longer frame is cut to this. */
+  maxFrame: 0.1,
+  /** Fixed logic step. */
+  step: 1 / 120,
 };
 
 export function slaSeconds(type: TicketType): number {
