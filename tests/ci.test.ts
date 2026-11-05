@@ -17,6 +17,13 @@ describe('ci.yml', () => {
     for (const tag of tags) expect(tag).toBe(`v${version}-noble`);
   });
 
+  it('checks the e2e image Node against .nvmrc before it builds', () => {
+    const e2e = workflow.slice(workflow.indexOf('\n  e2e:'), workflow.indexOf('\n  deploy:'));
+    const guard = e2e.indexOf('node scripts/check-node.mjs');
+    expect(guard).toBeGreaterThan(0);
+    expect(guard).toBeLessThan(e2e.indexOf('npm ci'));
+  });
+
   it('has no pull_request trigger (fork PRs must not reach the self-hosted runner)', () => {
     expect(workflow).not.toMatch(/pull_request/);
   });

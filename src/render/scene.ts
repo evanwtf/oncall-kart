@@ -11,8 +11,11 @@ import { createSparks } from './sparks';
 import { buildTrackMesh } from './trackMesh';
 
 export interface SceneHandle {
-  /** Draw the race. alpha in [0, 1] blends the last captured state toward the current one. */
-  render(race: Race, alpha: number): void;
+  /**
+   * Draw the race. alpha in [0, 1] blends the last captured state toward the
+   * current one. paused: freeze the wheels, sparks and other animation.
+   */
+  render(race: Race, alpha: number, paused?: boolean): void;
   /** Store the kart poses before a logic step, for interpolation. */
   capture(race: Race): void;
   onEvents(events: RaceEvent[]): void;
@@ -55,7 +58,8 @@ export function createScene(
     antialias: true,
     powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
+  const pixelRatio = () => Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
+  renderer.setPixelRatio(pixelRatio());
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = !lowPower;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -103,6 +107,8 @@ export function createScene(
   let lastTime = performance.now();
   let shake = 0;
   let snap = true;
+  /** Animation clock, seconds: it stops while the game is paused. */
+  let animTime = 0;
 
   const syncKarts = () => {
     fleet.setCount(race.karts.length);
@@ -121,6 +127,21 @@ export function createScene(
   resize();
   window.addEventListener('resize', resize);
 
+  // A window moved to another display changes the pixel ratio but sends no
+  // resize. A media query for the current ratio fires when it changes.
+  let dprQuery: MediaQueryList | null = null;
+  const onDpr = () => {
+    renderer.setPixelRatio(pixelRatio());
+    resize();
+    watchDpr();
+  };
+  const watchDpr = () => {
+    dprQuery?.removeEventListener('change', onDpr);
+    dprQuery = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`) ?? null;
+    dprQuery?.addEventListener('change', onDpr);
+  };
+  watchDpr();
+
   const capture = (r: Race) => {
     prev = r.karts.map((k) => ({ x: k.kart.pos.x, z: k.kart.pos.z, heading: k.kart.heading }));
   };
@@ -132,10 +153,12 @@ export function createScene(
   return {
     renderer,
     capture,
-    render(r: Race, alpha: number) {
-      const now = performance.now();
-      const dt = Math.min(0.1, (now - lastTime) / 1000);
-      lastTime = now;
+    render(r: Race, alpha: number, paused = false) {
+      const wall = performance.now();
+      const dt = paused ? 0 : Math.min(0.1, (wall - lastTime) / 1000);
+      lastTime = wall;
+      animTime += dt;
+      const now = animTime * 1000;
       race = r;
       if (wheelSpin.length !== r.karts.length) syncKarts();
 
@@ -152,7 +175,7 @@ export function createScene(
         const spin = k.kart.spinTime > 0 ? k.kart.spinTime * 14 : 0;
         const driftYaw = k.kart.driftDir * 0.35;
         const yaw = bodyYaw[i] ?? 0;
-        bodyYaw[i] = yaw + (spin + driftYaw - yaw) * (spin ? 1 : 0.2);
+        if (!paused) bodyYaw[i] = yaw + (spin + driftYaw - yaw) * (spin ? 1 : 0.2);
         wheelSpin[i] = (wheelSpin[i] ?? 0) + (k.kart.speed * dt) / 0.28;
         fleet.setPose(i, {
           ...pose,
@@ -173,12 +196,19 @@ export function createScene(
         chase.update(pose.x, pose.z, pose.heading, pk.kart.boostTime > 0, dt, snap);
         snap = false;
         const drifting = pk.kart.driftDir !== 0;
-        sparks.update(
-          dt,
-          drifting
-            ? { x: pose.x, z: pose.z, heading: pose.heading, stage: driftStage(pk.kart.driftTime) }
-            : null,
-        );
+        if (!paused) {
+          sparks.update(
+            dt,
+            drifting
+              ? {
+                  x: pose.x,
+                  z: pose.z,
+                  heading: pose.heading,
+                  stage: driftStage(pk.kart.driftTime),
+                }
+              : null,
+          );
+        }
         key.position.set(pose.x + 10, 30, pose.z + 6);
         key.target.position.set(pose.x, 0, pose.z);
       }
@@ -206,6 +236,12 @@ export function createScene(
     onEvents(events: RaceEvent[]) {
       let reshuffled = false;
       for (const e of events) {
+        if (e.type === 'respawn') {
+          // Draw the new spot at once: no blend from the old one, no camera swoop.
+          const k = race.karts[e.kartId];
+          if (k) prev[e.kartId] = { x: k.kart.pos.x, z: k.kart.pos.z, heading: k.kart.heading };
+          if (e.kartId === race.playerId) snap = true;
+        }
         if (e.type === 'board-reshuffled') {
           for (const row of e.rows) gates.redrawRow(race.board, row);
           reshuffled = true;
@@ -238,6 +274,7 @@ export function createScene(
     tags: () => tagPos,
     dispose() {
       window.removeEventListener('resize', resize);
+      dprQuery?.removeEventListener('change', onDpr);
       gates.dispose();
       fleet.dispose();
       props.dispose();

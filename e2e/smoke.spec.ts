@@ -189,3 +189,122 @@ test('items, a Page, and the results of an 8-kart race', async ({ page }) => {
   await shot('results');
   expect(errors).toEqual([]);
 });
+
+/** Collect console errors and page errors. */
+function trackErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+  page.on('pageerror', (err) => errors.push(err.message));
+  return errors;
+}
+
+async function startRace(page: Page) {
+  await page.goto('/oncall-kart/?seed=1');
+  await expect.poll(() => screen(page)).toBe('title');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => screen(page)).toBe('setup');
+  await page.keyboard.press('Enter');
+  await waitRacing(page);
+}
+
+test('the race keeps rendering after WebGL context loss and restore', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  await startRace(page);
+
+  const lose = await page.evaluate(() => {
+    const c = document.getElementById('game');
+    if (!(c instanceof HTMLCanvasElement)) return false;
+    const ext = c.getContext('webgl2')?.getExtension('WEBGL_lose_context');
+    if (!ext) return false;
+    (window as unknown as { __loseCtx: WEBGL_lose_context }).__loseCtx = ext;
+    ext.loseContext();
+    return true;
+  });
+  expect(lose).toBe(true);
+  await page.waitForTimeout(500);
+  await page.evaluate(() =>
+    (window as unknown as { __loseCtx: WEBGL_lose_context }).__loseCtx.restoreContext(),
+  );
+
+  // After the restore, frames draw again and the race clock runs.
+  const sample = () =>
+    page.evaluate(() => ({
+      calls: window.__oncallKart?.renderInfo().calls ?? 0,
+      time: window.__oncallKart?.raceTime() ?? 0,
+      lost: (document.getElementById('game') as HTMLCanvasElement)
+        .getContext('webgl2')
+        ?.isContextLost(),
+    }));
+  await expect.poll(async () => (await sample()).lost, { timeout: 10_000 }).toBe(false);
+  const a = await sample();
+  await holdUp(page, 1000);
+  const b = await sample();
+  expect(b.calls).toBeGreaterThan(0);
+  expect(b.time).toBeGreaterThan(a.time + 0.5);
+  expect(await speed(page)).toBeGreaterThan(1);
+  expect(errors).toEqual([]);
+});
+
+test('the pause screen is still: no wheels, sparks or lights move', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  await startRace(page);
+  await holdUp(page, 1000);
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => screen(page)).toBe('paused');
+  await page.waitForTimeout(300);
+  const canvas = page.locator('#game');
+  const first = await canvas.screenshot();
+  await page.waitForTimeout(700);
+  const second = await canvas.screenshot();
+  expect(second.equals(first)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('a new pixel ratio resizes the renderer', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  // A headless browser cannot move a window to another display. Record the
+  // resolution queries the game makes, then fake the move: a new ratio and a
+  // change event on the query, as a real browser sends.
+  await page.addInitScript(() => {
+    const queries: MediaQueryList[] = [];
+    (window as unknown as { __dprQueries: MediaQueryList[] }).__dprQueries = queries;
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (q: string) => {
+      const mql = real(q);
+      if (q.includes('dppx')) queries.push(mql);
+      return mql;
+    };
+  });
+  await page.goto('/oncall-kart/?seed=1');
+  await expect.poll(() => screen(page)).toBe('title');
+  const sample = () =>
+    page.evaluate(() => {
+      const c = document.getElementById('game') as HTMLCanvasElement;
+      const queries = (window as unknown as { __dprQueries: MediaQueryList[] }).__dprQueries;
+      return {
+        buffer: c.width,
+        css: c.clientWidth,
+        dpr: window.devicePixelRatio,
+        last: queries.at(-1)?.media ?? '',
+      };
+    });
+  const before = await sample();
+  expect(before.buffer).toBe(before.css * before.dpr);
+  expect(before.last).toContain(`${before.dpr}dppx`);
+  // Desktop Safari starts at 2, Desktop Chrome at 1: move to the other one.
+  const next = before.dpr === 1 ? 2 : 1;
+  await page.evaluate((ratio) => {
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => ratio });
+    const queries = (window as unknown as { __dprQueries: MediaQueryList[] }).__dprQueries;
+    queries.at(-1)?.dispatchEvent(new Event('change'));
+  }, next);
+  await expect.poll(async () => (await sample()).buffer).toBe(before.css * next);
+  // The game now listens for the next change, from the new ratio.
+  expect((await sample()).last).toContain(`${next}dppx`);
+  expect(errors).toEqual([]);
+});

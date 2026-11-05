@@ -218,7 +218,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           break;
         }
         if (a === 'respawn' && state.screen === 'racing') {
-          ui.onEvents(respawn(race, race.playerId), race);
+          onEvents(respawn(race, race.playerId));
         }
         break;
       case 'paused': {
@@ -234,7 +234,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           if (item === 'Restart') startRace();
           if (item === 'Respawn') {
             // A respawn in the countdown would do nothing: it only resumes.
-            if (pausedFrom === 'racing') ui.onEvents(respawn(race, race.playerId), race);
+            if (pausedFrom === 'racing') onEvents(respawn(race, race.playerId));
             resume();
           }
           if (item === 'Auto-gas') {
@@ -345,7 +345,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     audio.setMusic(musicFor());
     syncPause();
 
-    scene.render(race, state.screen === 'paused' ? 1 : acc / TUNING.step);
+    const paused = state.screen === 'paused';
+    scene.render(race, paused ? 1 : acc / TUNING.step, paused);
     state.tags = scene.tags();
     ui.render(state);
     requestAnimationFrame(frame);

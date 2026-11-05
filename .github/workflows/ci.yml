@@ -49,6 +49,8 @@ jobs:
       HOME: /root
     steps:
       - uses: actions/checkout@v7
+      # The image brings its own Node: refuse one that differs from .nvmrc.
+      - run: node scripts/check-node.mjs
       - run: npm ci
       - run: npx playwright test
       - name: Upload the Playwright report of a failed run
