@@ -13,7 +13,8 @@ export interface ShooterScene {
   reset(s: Shift): void;
   /** A rack's ticket closed: its beacon shows green for a moment. */
   flashGreen(rackId: string): void;
-  render(s: Shift, alpha: number, paused: boolean): void;
+  /** `view`: the live yaw and pitch from the input, newer than the last logic step. */
+  render(s: Shift, alpha: number, paused: boolean, view?: { yaw: number; pitch: number }): void;
   dispose(): void;
 }
 
@@ -375,6 +376,7 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
   const q = new THREE.Quaternion();
   const one = new THREE.Vector3(1, 1, 1);
   const pos = new THREE.Vector3();
+  const yAxis = new THREE.Vector3(0, 1, 0);
 
   const setTint = (ids: readonly number[]) => {
     for (const i of tinted) racks.setColorAt(i, white);
@@ -396,7 +398,7 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
     flashGreen(rackId) {
       greens.set(rackId, animTime + GREEN_TIME);
     },
-    render(s, alpha, paused) {
+    render(s, alpha, paused, view) {
       const wall = performance.now();
       const dt = paused ? 0 : Math.min(0.1, (wall - lastWall) / 1000);
       lastWall = wall;
@@ -408,7 +410,7 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
         SHOOTER_TUNING.eyeHeight,
         prev.z + (s.player.z - prev.z) * a,
       );
-      camera.rotation.set(s.player.pitch, s.player.yaw, 0);
+      camera.rotation.set(view?.pitch ?? s.player.pitch, view?.yaw ?? s.player.yaw, 0);
 
       // Beacons: red over open tickets (blinking), green over just-closed ones.
       for (const [id, until] of greens) if (until <= animTime) greens.delete(id);
@@ -442,14 +444,16 @@ export function createShooterScene(canvas: HTMLCanvasElement, floor: FloorDef): 
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       }
-      if (broken.join(',') !== tinted.join(',')) setTint(broken);
+      if (broken.length !== tinted.length || broken.some((v, i) => v !== tinted[i])) {
+        setTint(broken);
+      }
 
       let k = 0;
       for (const p of s.patches) {
         if (p.applied || k >= MAX_MARKERS) continue;
         const t = targetById.get(p.targetId);
         if (!t) continue;
-        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), animTime * 2);
+        q.setFromAxisAngle(yAxis, animTime * 2);
         pos.set(t.x, heightOf(t) + 0.45 + Math.sin(animTime * 3) * 0.08, t.z);
         m4.compose(pos, q, one);
         markers.setMatrixAt(k++, m4);

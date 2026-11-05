@@ -72,6 +72,21 @@ function freeRack(s: Shift, skip: string[] = []): string {
   return r.id;
 }
 
+/** A shift with two broken racks side by side in one row, neither a patch target. */
+function sideBySide() {
+  const s = createShift(1);
+  const patchIds = new Set(s.patches.map((p) => p.targetId));
+  const pair = s.floor.racks.findIndex((r, i) => {
+    const next = s.floor.racks[i + 1];
+    return !!next && !patchIds.has(r.id) && !patchIds.has(next.id) && next.z === r.z;
+  });
+  const a = s.floor.racks[pair] as Target;
+  const b = s.floor.racks[pair + 1] as Target;
+  breakRack(s, a.id, type('bad-dimm'));
+  breakRack(s, b.id, type('bad-dimm'));
+  return { s, a, b };
+}
+
 /** A shift with one broken rack of the given type, the player in front of it, and the clock at 0. */
 function brokenAt(typeId: string, seed = 1) {
   const s = createShift(seed);
@@ -87,6 +102,9 @@ function work(s: Shift, step: Step, seconds: number) {
   events.push(...run(s, ticks(seconds), () => ({ work: true })));
   return events;
 }
+
+/** An angle in (-π, π]. */
+const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 const types = (events: ShiftEvent[]) => events.map((e) => e.type);
 
@@ -179,20 +197,25 @@ describe('facingTarget', () => {
     expect(facingTarget(s)).toBeNull();
   });
 
-  it('picks the rack in front when two broken racks stand side by side', () => {
-    const s = createShift(1);
-    const patchIds = new Set(s.patches.map((p) => p.targetId));
-    const pair = s.floor.racks.findIndex((r, i) => {
-      const next = s.floor.racks[i + 1];
-      return !!next && !patchIds.has(r.id) && !patchIds.has(next.id) && next.z === r.z;
-    });
-    const a = s.floor.racks[pair] as Target;
-    const b = s.floor.racks[pair + 1] as Target;
-    breakRack(s, a.id, type('bad-dimm'));
-    breakRack(s, b.id, type('failed-disk'));
-    stand(s, a.id);
+  it('picks the rack nearer the view center when two broken racks stand side by side', () => {
+    const { s, a, b } = sideBySide();
+    // Stand 0.8 m out from the seam between the two fronts.
+    const pa = frontPoint(a, 0.8);
+    const pb = frontPoint(b, 0.8);
+    s.player.x = (pa.x + pb.x) / 2;
+    s.player.z = (pa.z + pb.z) / 2;
+    const yawTo = (t: Target) => {
+      const f = frontPoint(t, 0);
+      return yawToward(s.player.x, s.player.z, f.x, f.z);
+    };
+    // Half the signed angle from A to B, wrapped: these yaws sit near ±π.
+    const half = wrap(yawTo(b) - yawTo(a)) / 2;
+    const mid = yawTo(a) + half;
+    // Bias the view a little toward one rack: both are inside the cone, the nearer one wins.
+    const bias = -half * 0.5;
+    s.player.yaw = mid + bias;
     expect(facingTarget(s)?.id).toBe(a.id);
-    stand(s, b.id);
+    s.player.yaw = mid - bias;
     expect(facingTarget(s)?.id).toBe(b.id);
   });
 
@@ -225,7 +248,7 @@ describe('work at a rack', () => {
     expect(s.work).toBeNull();
     expect(s.open[0]?.ticket.stepIndex).toBe(0);
     // The pick stays, so the next hold starts again from zero.
-    expect(s.selected).toBe('LOGCOLLECT');
+    expect(s.selected?.step).toBe('LOGCOLLECT');
   });
 
   it('starts no work while E is held before a step is picked', () => {
@@ -261,12 +284,70 @@ describe('work at a rack', () => {
     expect(s.work).toBeNull();
   });
 
-  it('ignores movement while working: the player stays put', () => {
+  it('plants the player while working, even with speed left over from walking', () => {
     const { s } = brokenAt('bad-dimm');
+    run(s, 1, () => ({ pick: 'LOGCOLLECT' }));
+    // Still moving at full speed when E goes down.
+    s.player.vx = 6;
     const { x, z } = s.player;
-    work(s, 'LOGCOLLECT', 1);
+    run(s, 30, () => ({ work: true }));
+    expect(s.work).not.toBeNull();
     expect(s.player.x).toBe(x);
     expect(s.player.z).toBe(z);
+  });
+
+  it('does not carry a pick from one rack to another', () => {
+    const { s, a, b } = sideBySide();
+    stand(s, a.id);
+    work(s, 'REIMAGE', 0.5);
+    run(s, 1); // let go of E: cancelled, the pick stays at A
+    expect(s.selected).toEqual({ rackId: a.id, step: 'REIMAGE' });
+    stand(s, b.id);
+    const events = run(s, ticks(T.opSeconds + 0.5), () => ({ work: true }));
+    expect(s.work).toBeNull();
+    expect(types(events)).not.toContain('step-wrong');
+    expect(types(events)).not.toContain('alarm');
+    expect(s.selected).toBeNull();
+  });
+
+  it('does not start work at B when the player turns from A to B with E held', () => {
+    const { s, a, b } = sideBySide();
+    stand(s, a.id);
+    run(s, 1, () => ({ pick: 'REIMAGE' }));
+    // Turn away from A (no target), then on to B, holding E all along.
+    run(s, 1, (sh) => ({ work: true, yaw: sh.player.yaw + Math.PI / 2 }));
+    stand(s, b.id);
+    const events = run(s, ticks(T.opSeconds + 0.5), () => ({ work: true }));
+    expect(s.work).toBeNull();
+    expect(types(events)).not.toContain('step-wrong');
+  });
+
+  it('keeps the pick through movement at the same rack', () => {
+    const { s, rackId } = brokenAt('bad-dimm');
+    run(s, 1, () => ({ pick: 'LOGCOLLECT' }));
+    run(s, 2, () => ({ move: { forward: 0, strafe: 0.01 } }));
+    stand(s, rackId);
+    const events = run(s, ticks(T.opSeconds + 0.1), () => ({ work: true }));
+    expect(events).toContainEqual({ type: 'step-ok', rackId, step: 'LOGCOLLECT' });
+  });
+
+  it('keeps working at a rack while it stays in the cone, though a neighbour scores better', () => {
+    const { s, a, b } = sideBySide();
+    stand(s, a.id);
+    run(s, 1, () => ({ pick: 'LOGCOLLECT' }));
+    run(s, ticks(1), () => ({ work: true }));
+    expect(s.work?.targetId).toBe(a.id);
+    // Drift the view toward B: B is now nearer the view center, A is still in the cone.
+    const fa = frontPoint(a, 0);
+    const fb = frontPoint(b, 0);
+    const toA = yawToward(s.player.x, s.player.z, fa.x, fa.z);
+    const toB = yawToward(s.player.x, s.player.z, fb.x, fb.z);
+    const yaw = toA + wrap(toB - toA) * 0.9;
+    s.player.yaw = yaw;
+    expect(facingTarget(s)?.id).toBe(b.id);
+    const events = run(s, ticks(T.opSeconds), () => ({ work: true, yaw }));
+    expect(types(events)).not.toContain('work-cancelled');
+    expect(events).toContainEqual({ type: 'step-ok', rackId: a.id, step: 'LOGCOLLECT' });
   });
 
   it('takes handsOnSeconds for PIT', () => {

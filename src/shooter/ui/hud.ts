@@ -50,6 +50,19 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
+/** Write text only when it changes: a same-value write still churns the DOM. */
+function setText(e: HTMLElement, text: string): void {
+  if (e.textContent !== text) e.textContent = text;
+}
+
+function setHidden(e: HTMLElement, hidden: boolean): void {
+  if (e.hidden !== hidden) e.hidden = hidden;
+}
+
+function setTransform(e: HTMLElement, value: string): void {
+  if (e.style.transform !== value) e.style.transform = value;
+}
+
 /** Map scale, pixels per metre. */
 const MAP_SCALE = 2.2;
 const TOAST_TIME = 3;
@@ -103,6 +116,7 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
     const li = el('li', 'zd-panel-step', undefined, panelList);
     el('span', 'zd-key', String(i + 1), li);
     const label = el('span', 'zd-label', step, li);
+    li.style.setProperty('--step-color', STEP_COLORS[step]);
     return { li, label };
   });
   const panelPatch = el('div', 'zd-panel-patch', '', panel);
@@ -114,7 +128,8 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
   let slaFills: { fill: HTMLElement; bar: HTMLElement; rackId: string }[] = [];
   let patchKey = '';
   let floorBase: HTMLCanvasElement | null = null;
-  let baseFloor: FloorDef | null = null;
+  /** What the base was drawn for: the floor, the CSS size and the pixel ratio. */
+  let baseFor: { floor: FloorDef; w: number; h: number; dpr: number } | null = null;
   let toastList: { el: HTMLElement; until: number }[] = [];
   let lastTime = 0;
 
@@ -165,11 +180,18 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round(s.floor.width * MAP_SCALE);
     const h = Math.round(s.floor.depth * MAP_SCALE);
-    if (!floorBase || baseFloor !== s.floor || map.width !== w * dpr) {
+    const same =
+      baseFor &&
+      baseFor.floor === s.floor &&
+      baseFor.w === w &&
+      baseFor.h === h &&
+      baseFor.dpr === dpr;
+    if (!floorBase || !same) {
       floorBase = drawFloorBase(s.floor, w, h, dpr);
-      baseFloor = s.floor;
-      map.width = w * dpr;
-      map.height = h * dpr;
+      baseFor = { floor: s.floor, w, h, dpr };
+      // Canvas sizes are whole pixels; a ratio such as 1.8 would truncate.
+      map.width = Math.floor(w * dpr);
+      map.height = Math.floor(h * dpr);
       map.style.width = `${w}px`;
       map.style.height = `${h}px`;
     }
@@ -179,8 +201,7 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
     ctx.clearRect(0, 0, map.width, map.height);
     ctx.drawImage(floorBase, 0, 0);
     ctx.scale(dpr * MAP_SCALE, dpr * MAP_SCALE);
-    const find = (id: string) =>
-      s.floor.racks.find((t) => t.id === id) ?? s.floor.devices.find((t) => t.id === id);
+    const find = (id: string) => s.targets.get(id);
     const mark = (t: Target | undefined, color: string, r: number) => {
       if (!t) return;
       ctx.fillStyle = color;
@@ -204,40 +225,40 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
   };
 
   const renderPanel = (s: Shift, facing: Target | null) => {
-    if (!facing) {
-      panel.hidden = true;
-      return;
-    }
-    panel.hidden = false;
+    setHidden(panel, !facing);
+    if (!facing) return;
     const open = s.open.find((o) => o.rackId === facing.id);
     const work = s.work && s.work.targetId === facing.id ? s.work : null;
     if (open) {
-      panel.dataset.mode = 'rack';
-      panelHead.textContent = `${open.ticket.type.title} · ${open.ticket.location}`;
-      panelList.hidden = false;
-      panelPatch.hidden = true;
+      if (panel.dataset.mode !== 'rack') panel.dataset.mode = 'rack';
+      setText(panelHead, `${open.ticket.type.title} · ${open.ticket.location}`);
+      setHidden(panelList, false);
+      setHidden(panelPatch, true);
+      const picked = s.selected?.rackId === facing.id ? s.selected.step : null;
       stepEls.forEach(({ li, label }, i) => {
         const step = PANEL_STEPS[i] as Step;
-        const text = panelLabel(step, open.ticket.type.pitWork);
-        if (label.textContent !== text) label.textContent = text;
-        li.classList.toggle('selected', s.selected === step);
-        li.style.setProperty('--step-color', STEP_COLORS[step]);
+        setText(label, panelLabel(step, open.ticket.type.pitWork));
+        if (li.classList.contains('selected') !== (picked === step)) {
+          li.classList.toggle('selected', picked === step);
+        }
       });
-      panelHint.textContent =
-        s.selected === null
+      setText(
+        panelHint,
+        picked === null
           ? 'Pick a step: 1-9'
-          : `Hold E: ${panelLabel(s.selected, open.ticket.type.pitWork)}`;
+          : `Hold E: ${panelLabel(picked, open.ticket.type.pitWork)}`,
+      );
     } else {
-      panel.dataset.mode = 'patch';
+      if (panel.dataset.mode !== 'patch') panel.dataset.mode = 'patch';
       const patch = s.patches.find((p) => p.targetId === facing.id && !p.applied);
-      panelHead.textContent = `${facing.kind} ${facing.id}`;
-      panelList.hidden = true;
-      panelPatch.hidden = false;
-      panelPatch.textContent = patch ? `Patch ${patch.id} “${patch.name}”` : '';
-      panelHint.textContent = 'Hold E to apply';
+      setText(panelHead, `${facing.kind} ${facing.id}`);
+      setHidden(panelList, true);
+      setHidden(panelPatch, false);
+      setText(panelPatch, patch ? `Patch ${patch.id} “${patch.name}”` : '');
+      setText(panelHint, 'Hold E to apply');
     }
     const frac = work ? Math.min(1, work.progress / work.duration) : 0;
-    barFill.style.transform = `scaleX(${frac})`;
+    setTransform(barFill, `scaleX(${frac})`);
   };
 
   return {
@@ -245,17 +266,17 @@ export function createShooterHud(root: HTMLElement): ShooterHud {
     update(s, facing) {
       lastTime = s.time;
       const left = SHOOTER_TUNING.shiftSeconds - s.time;
-      const text = formatClock(left);
-      if (clock.textContent !== text) clock.textContent = text;
-      clock.classList.toggle('low', left <= 30);
+      setText(clock, formatClock(left));
+      if (clock.classList.contains('low') !== left <= 30) clock.classList.toggle('low', left <= 30);
       renderTickets(s);
       for (const f of slaFills) {
         const o = s.open.find((x) => x.rackId === f.rackId);
         if (!o) continue;
         const total = o.ticket.deadline - o.ticket.issuedAt;
         const frac = Math.max(0, Math.min(1, (o.ticket.deadline - s.time) / Math.max(1, total)));
-        f.fill.style.transform = `scaleX(${o.breached ? 1 : frac})`;
-        f.bar.classList.toggle('low', o.breached || frac < 0.25);
+        setTransform(f.fill, `scaleX(${o.breached ? 1 : frac})`);
+        const low = o.breached || frac < 0.25;
+        if (f.bar.classList.contains('low') !== low) f.bar.classList.toggle('low', low);
       }
       renderPatches(s);
       renderMap(s);

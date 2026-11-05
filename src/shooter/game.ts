@@ -94,14 +94,21 @@ function saveSensitivity(i: number): void {
 export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
   const fixedSeed = seedFromUrl();
   const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 2 ** 31);
-  const input = createShooterInput(window, canvas);
+  let screen: ShooterScreen = 'briefing';
+  let pauseIndex = 0;
+  // Ask for the lock inside the keydown that starts play: Safari refuses one
+  // asked for later, from the frame loop.
+  const input = createShooterInput(window, canvas, {
+    lockOnAction: (a) =>
+      (screen === 'briefing' && a === 'confirm') ||
+      (screen === 'paused' &&
+        (a === 'pause' || (a === 'confirm' && PAUSE_ITEMS[pauseIndex] === 'Resume'))),
+  });
   const scene = createShooterScene(canvas, FLOOR);
   const hud = createShooterHud(uiRoot);
   uiRoot.classList.add('zd');
 
   let shift: Shift = createShift(newSeed());
-  let screen: ShooterScreen = 'briefing';
-  let pauseIndex = 0;
   let endIndex = 0;
   let sensitivityIndex = loadSensitivity();
   let acc = 0;
@@ -115,22 +122,30 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     );
   applySensitivity();
 
-  const newShift = () => {
-    shift = createShift(newSeed());
+  /** Set up the view, the scene and the HUD for `shift`. */
+  const adopt = () => {
     input.setView(shift.player.yaw, 0);
     scene.reset(shift);
     hud.clear();
     acc = 0;
     pendingPick = null;
   };
-  newShift();
+  adopt();
+  const newShift = () => {
+    shift = createShift(newSeed());
+    adopt();
+  };
 
-  const play = () => {
+  /**
+   * Start or resume the shift. `lock`: ask for the mouse lock here (a click).
+   * A key press asked for it already, in its own handler. The shift starts
+   * even if the browser refuses the lock; a click on the floor tries again.
+   */
+  const play = (lock = true) => {
     screen = 'playing';
     last = performance.now();
     acc = 0;
-    // The shift starts even if the browser refuses the lock; a click on the floor tries again.
-    input.requestLock();
+    if (lock) input.requestLock();
   };
   const pauseGame = () => {
     if (screen !== 'playing') return;
@@ -191,21 +206,25 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
   const handle = (a: ShooterAction) => {
     switch (screen) {
       case 'briefing':
-        if (a === 'confirm') play();
+        if (a === 'confirm') play(false);
         break;
       case 'playing':
-        if (a === 'pause') pauseGame();
+        if (a === 'pause' || a === 'lock-lost') pauseGame();
         break;
       case 'paused': {
         const n = PAUSE_ITEMS.length;
-        if (a === 'pause') play();
+        // Only a key resumes. A lost lock never does.
+        if (a === 'pause') play(false);
         if (a === 'up') pauseIndex = (pauseIndex + n - 1) % n;
         if (a === 'down') pauseIndex = (pauseIndex + 1) % n;
         const item = PAUSE_ITEMS[pauseIndex];
         if (item === 'Mouse sensitivity' && (a === 'left' || a === 'right')) {
           sensitivity(a === 'left' ? -1 : 1);
         }
-        if (a === 'confirm' && item) pauseItem(item);
+        if (a === 'confirm' && item) {
+          if (item === 'Resume') play(false);
+          else pauseItem(item);
+        }
         break;
       }
       case 'ended': {
@@ -247,6 +266,8 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
     const dt = Math.min(MAX_CATCH_UP, Math.max(0, (now - last) / 1000));
     last = now;
     for (const a of input.takeActions()) handle(a);
+    // A lock that lands while the shift is not running (asked for, then P) is given back.
+    if (screen !== 'playing' && input.locked()) input.releaseLock();
 
     if (screen === 'playing') {
       acc += dt;
@@ -275,7 +296,8 @@ export function startShooter(canvas: HTMLCanvasElement, uiRoot: HTMLElement): vo
       locked: input.locked(),
     });
     const paused = screen !== 'playing';
-    scene.render(shift, paused ? 1 : acc / STEP, paused);
+    // The camera turns with the live mouse, not only on logic steps: no stutter at 120 Hz.
+    scene.render(shift, paused ? 1 : acc / STEP, paused, input.view());
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

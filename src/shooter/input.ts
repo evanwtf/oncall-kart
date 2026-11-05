@@ -3,8 +3,21 @@ import type { ShiftInput } from './logic/shift';
 import { PANEL_STEPS } from './logic/shift';
 import { SHOOTER_TUNING } from './logic/tuning';
 
-/** One-shot actions for the menus and the pause. Each fires once per key press. */
-export type ShooterAction = 'pause' | 'confirm' | 'up' | 'down' | 'left' | 'right';
+/**
+ * One-shot actions for the menus and the pause. Each fires once per key
+ * press. 'lock-lost' comes from the browser, not a key: the mouse lock ended
+ * without the game asking. It only ever pauses, never resumes.
+ */
+export type ShooterAction = 'pause' | 'confirm' | 'up' | 'down' | 'left' | 'right' | 'lock-lost';
+
+export interface ShooterInputOptions {
+  /**
+   * Called inside the keydown handler for each action. True: the action will
+   * start play, so the lock is asked for now, while the key press still counts
+   * as a user gesture (Safari refuses a lock asked for later, from a frame).
+   */
+  lockOnAction?(a: ShooterAction): boolean;
+}
 
 export interface ShooterInput {
   /** Held keys, the view and the last pick. A pick is returned once. */
@@ -19,6 +32,8 @@ export interface ShooterInput {
   setSensitivity(v: number): void;
   /** Set the view, for a new shift or a debug jump. */
   setView(yaw: number, pitch: number): void;
+  /** The live view, between logic steps too, for the camera. */
+  view(): { yaw: number; pitch: number };
   dispose(): void;
 }
 
@@ -51,7 +66,11 @@ const PREVENT = new Set([...FORWARD, ...BACK, ...LEFT, ...RIGHT, ...WORK, 'Space
 /** An Esc keydown this soon (ms) after a lost lock is the Esc that released it. */
 const ESC_AFTER_UNLOCK_MS = 250;
 
-export function createShooterInput(win: Window, canvas: HTMLCanvasElement): ShooterInput {
+export function createShooterInput(
+  win: Window,
+  canvas: HTMLCanvasElement,
+  options: ShooterInputOptions = {},
+): ShooterInput {
   const doc = win.document;
   const held = new Set<string>();
   let queue: ShooterAction[] = [];
@@ -67,6 +86,20 @@ export function createShooterInput(win: Window, canvas: HTMLCanvasElement): Shoo
   const isLocked = () => doc.pointerLockElement === canvas;
 
   const clear = () => held.clear();
+
+  /** Ask for the lock. A refusal, thrown or rejected, is caught and logs nothing. */
+  const requestLock = () => {
+    if (isLocked()) return;
+    try {
+      // Chrome returns a promise; Safari returns undefined. Either may refuse.
+      const r = canvas.requestPointerLock?.() as unknown;
+      if (r && typeof (r as Promise<void>).catch === 'function') {
+        (r as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      // Refused: the shift goes on, and a click on the floor tries again.
+    }
+  };
 
   const onDown = (e: KeyboardEvent) => {
     if (PREVENT.has(e.code)) e.preventDefault();
@@ -89,6 +122,7 @@ export function createShooterInput(win: Window, canvas: HTMLCanvasElement): Shoo
       return;
     }
     queue.push(action);
+    if (options.lockOnAction?.(action)) requestLock();
   };
   const onUp = (e: KeyboardEvent) => {
     // macOS sends no keyup for keys released while Cmd is down: clear them all.
@@ -106,7 +140,7 @@ export function createShooterInput(win: Window, canvas: HTMLCanvasElement): Shoo
     if (wasLocked && !now) {
       unlockedAt = performance.now();
       clear();
-      if (!releasing) queue.push('pause');
+      if (!releasing) queue.push('lock-lost');
     }
     if (!now) releasing = false;
     wasLocked = now;
@@ -146,18 +180,7 @@ export function createShooterInput(win: Window, canvas: HTMLCanvasElement): Shoo
       queue = [];
       return out;
     },
-    requestLock() {
-      if (isLocked()) return;
-      try {
-        // Chrome returns a promise; Safari returns undefined. Either may refuse.
-        const r = canvas.requestPointerLock?.() as unknown;
-        if (r && typeof (r as Promise<void>).catch === 'function') {
-          (r as Promise<void>).catch(() => undefined);
-        }
-      } catch {
-        // Refused: the shift goes on, and a click on the floor tries again.
-      }
-    },
+    requestLock,
     releaseLock() {
       if (!isLocked()) return;
       releasing = true;
@@ -171,6 +194,7 @@ export function createShooterInput(win: Window, canvas: HTMLCanvasElement): Shoo
       yaw = y;
       pitch = Math.max(-pitchLimit, Math.min(pitchLimit, p));
     },
+    view: () => ({ yaw, pitch }),
     dispose() {
       win.removeEventListener('keydown', onDown);
       win.removeEventListener('keyup', onUp);

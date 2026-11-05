@@ -84,6 +84,19 @@ function button(cls: string, text: string, parent: HTMLElement, fn: () => void):
   return b;
 }
 
+/** Write text only when it changes: a same-value write still churns the DOM. */
+function setText(e: HTMLElement, text: string): void {
+  if (e.textContent !== text) e.textContent = text;
+}
+
+function setHidden(e: HTMLElement, hidden: boolean): void {
+  if (e.hidden !== hidden) e.hidden = hidden;
+}
+
+function setSelected(e: HTMLElement, on: boolean): void {
+  if (e.classList.contains('selected') !== on) e.classList.toggle('selected', on);
+}
+
 const CONTROLS: readonly [string, string][] = [
   ['W A S D / arrows', 'Move and strafe'],
   ['Mouse', 'Look'],
@@ -184,14 +197,14 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
   return {
     render(state) {
       const { screen, shift } = state;
-      root.dataset.screen = screen;
+      if (root.dataset.screen !== screen) root.dataset.screen = screen;
       if (screen !== lastScreen) {
-        briefing.hidden = screen !== 'briefing';
-        pause.hidden = screen !== 'paused';
-        ended.hidden = screen !== 'ended';
+        setHidden(briefing, screen !== 'briefing');
+        setHidden(pause, screen !== 'paused');
+        setHidden(ended, screen !== 'ended');
         lastScreen = screen;
       }
-      lockHint.hidden = !(screen === 'playing' && !state.locked);
+      setHidden(lockHint, !(screen === 'playing' && !state.locked));
       if (screen === 'briefing' && shift !== lastShift) {
         lastShift = shift;
         briefPatches.replaceChildren(
@@ -209,23 +222,20 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
       }
       if (screen === 'paused') {
         pauseEls.forEach(({ b, label }, i) => {
-          b.classList.toggle('selected', i === state.pauseIndex);
-          if (label) {
-            const text = sensitivityText(state.sensitivityIndex);
-            if (label.textContent !== text) label.textContent = text;
-          }
+          setSelected(b, i === state.pauseIndex);
+          if (label) setText(label, sensitivityText(state.sensitivityIndex));
         });
       }
       if (screen === 'ended') {
         const ending = shift.ended ?? 'fired';
-        endTitle.textContent = ENDINGS[ending].title;
-        endTitle.dataset.ending = ending;
-        endLine.textContent = ENDINGS[ending].line;
-        rows.closed.textContent = String(shift.stats.ticketsClosed);
-        rows.breaches.textContent = String(shift.stats.slaBreaches);
-        rows.wrong.textContent = String(shift.stats.wrongSteps);
+        setText(endTitle, ENDINGS[ending].title);
+        if (endTitle.dataset.ending !== ending) endTitle.dataset.ending = ending;
+        setText(endLine, ENDINGS[ending].line);
+        setText(rows.closed, String(shift.stats.ticketsClosed));
+        setText(rows.breaches, String(shift.stats.slaBreaches));
+        setText(rows.wrong, String(shift.stats.wrongSteps));
         const applied = shift.patches.filter((p) => p.applied).length;
-        rows.patches.textContent = `${applied} / ${shift.patches.length}`;
+        setText(rows.patches, `${applied} / ${shift.patches.length}`);
         const key = shift.patches.map((p) => `${p.id}:${p.applied}`).join('|');
         if (endPatches.dataset.key !== key) {
           endPatches.dataset.key = key;
@@ -239,7 +249,7 @@ export function createShooterScreens(root: HTMLElement, h: ScreensHandlers): Sho
             ),
           );
         }
-        endEls.forEach((b, i) => b.classList.toggle('selected', i === state.endIndex));
+        endEls.forEach((b, i) => setSelected(b, i === state.endIndex));
       }
     },
     dispose() {

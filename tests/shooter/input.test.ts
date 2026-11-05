@@ -117,14 +117,55 @@ describe('shooter input', () => {
     expect(r.work).toBe(false);
   });
 
-  it('queues one pause when the lock is lost, even with the Esc that caused it', () => {
+  it('queues lock-lost, not pause, when the lock is lost, even with the Esc that caused it', () => {
     input = createShooterInput(window, canvas);
     setLock(canvas);
     expect(input.locked()).toBe(true);
     setLock(null);
     down('Escape');
     expect(input.locked()).toBe(false);
-    expect(input.takeActions()).toEqual(['pause']);
+    expect(input.takeActions()).toEqual(['lock-lost']);
+  });
+
+  it('ignores an Esc keydown while locked: only the lock change counts', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    down('Escape');
+    expect(input.takeActions()).toEqual([]);
+    setLock(null);
+    expect(input.takeActions()).toEqual(['lock-lost']);
+  });
+
+  it('queues nothing when the game gives up the lock itself', () => {
+    input = createShooterInput(window, canvas);
+    setLock(canvas);
+    input.releaseLock();
+    setLock(null);
+    expect(input.takeActions()).toEqual([]);
+    // The next loss, not asked for, counts again.
+    setLock(canvas);
+    setLock(null);
+    expect(input.takeActions()).toEqual(['lock-lost']);
+  });
+
+  it('asks for the lock inside the key handler when the action will start play', () => {
+    const request = vi.fn();
+    canvas.requestPointerLock = request as unknown as HTMLCanvasElement['requestPointerLock'];
+    input = createShooterInput(window, canvas, { lockOnAction: (a) => a === 'confirm' });
+    down('KeyP');
+    expect(request).not.toHaveBeenCalled();
+    down('Enter');
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the live view without taking the pick', () => {
+    input = createShooterInput(window, canvas);
+    input.setView(0, 0);
+    setLock(canvas);
+    down('Digit2');
+    mouse(10, 0);
+    expect(input.view().yaw).toBeCloseTo(-10 * SHOOTER_TUNING.mouseSensitivity);
+    expect(input.read().pick).toBe('TAKEDOWN');
   });
 
   it('releases every key when the lock is lost', () => {

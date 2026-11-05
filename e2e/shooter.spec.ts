@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { ShooterHooks } from '../src/shooter/game';
 import { PANEL_STEPS } from '../src/shooter/logic/shift';
-import { SHOOTER_TUNING } from '../src/shooter/logic/tuning';
 
 const URL = '/oncall-kart/?game=shooter&seed=1&debug=1';
 
@@ -31,20 +30,52 @@ async function face(page: Page, id: string) {
   await page.evaluate((target) => window.__oncallShooter?.faceTarget?.(target), id);
 }
 
-/** Pick a step with its number key, then hold E long enough for it to finish. */
-async function doStep(page: Page, step: string) {
-  const key = PANEL_STEPS.indexOf(step as (typeof PANEL_STEPS)[number]) + 1;
-  expect(key).toBeGreaterThan(0);
-  await page.keyboard.press(`Digit${key}`);
-  const seconds = step === 'PIT' ? SHOOTER_TUNING.handsOnSeconds : SHOOTER_TUNING.opSeconds;
-  await holdE(page, (seconds + 0.5) * 1000);
+/** Where one rack's ticket stands: its next step, 'closed', plus the wrong-step count. */
+const rackState = (page: Page, rackId: string) =>
+  page.evaluate((id) => {
+    const h = window.__oncallShooter as ShooterHooks;
+    const t = h.openTickets().find((x) => x.rackId === id);
+    return `${t ? t.next : 'closed'}/${h.stats().wrongSteps}`;
+  }, rackId);
+
+/**
+ * Hold E until `done` holds, then let go. Game time can run slower than the
+ * wall clock on a slow software-GL frame, so a fixed hold is not enough.
+ */
+async function holdUntil(page: Page, done: () => Promise<boolean>, timeout = 30_000) {
+  await page.keyboard.down('KeyE');
+  try {
+    await expect.poll(done, { timeout, intervals: [50, 100, 200] }).toBe(true);
+  } finally {
+    await page.keyboard.up('KeyE');
+  }
 }
 
-async function holdE(page: Page, ms: number) {
-  await page.keyboard.down('KeyE');
-  await page.waitForTimeout(ms);
-  await page.keyboard.up('KeyE');
+/** Pick a step with its number key, then hold E until the rack's ticket moves. */
+async function doStep(page: Page, rackId: string, step: string) {
+  const key = PANEL_STEPS.indexOf(step as (typeof PANEL_STEPS)[number]) + 1;
+  expect(key).toBeGreaterThan(0);
+  const before = await rackState(page, rackId);
+  await page.keyboard.press(`Digit${key}`);
+  await holdUntil(page, async () => (await rackState(page, rackId)) !== before);
 }
+
+/** Two animation frames: every queued input is handled by then. */
+const twoFrames = (page: Page) =>
+  page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
+
+/** Pretend the browser took (canvas) or ended (null) the mouse lock. */
+const fakeLock = (page: Page, locked: boolean) =>
+  page.evaluate((on) => {
+    const canvas = document.getElementById('game');
+    Object.defineProperty(document, 'pointerLockElement', {
+      configurable: true,
+      get: () => (on ? canvas : null),
+    });
+    document.dispatchEvent(new Event('pointerlockchange'));
+  }, locked);
 
 const stats = (page: Page) => page.evaluate(() => window.__oncallShooter?.stats());
 
@@ -70,23 +101,10 @@ test('a shift: walk, fix a rack, a wrong step, pause, and fired at 0:00', async 
   await face(page, 'r1');
   await expect(page.locator('.zd-panel')).toBeVisible();
   await expect(page.locator('.zd-panel-head')).toContainText('r1-u');
-  await page.keyboard.press('Digit5');
-  await holdE(page, 2500);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (window.__oncallShooter as ShooterHooks).openTickets().find((t) => t.rackId === 'r1')
-            ?.next,
-      ),
-    )
-    .toBe('REINSTATE');
-  await page.keyboard.press('Digit4');
-  await holdE(page, 2500);
-  const open1 = await page.evaluate(() =>
-    (window.__oncallShooter as ShooterHooks).openTickets().map((t) => t.rackId),
-  );
-  expect(open1).not.toContain('r1');
+  await doStep(page, 'r1', 'FW-ISO');
+  expect(await rackState(page, 'r1')).toBe('REINSTATE/0');
+  await doStep(page, 'r1', 'REINSTATE');
+  expect(await rackState(page, 'r1')).toBe('closed/0');
   expect((await stats(page))?.ticketsClosed).toBe(1);
 
   // A wrong step: MAINT (key 1) on a firmware ticket.
@@ -94,8 +112,8 @@ test('a shift: walk, fix a rack, a wrong step, pause, and fired at 0:00', async 
     (window.__oncallShooter as ShooterHooks).breakNow?.('r2', 'outdated-firmware'),
   );
   await face(page, 'r2');
-  await page.keyboard.press('Digit1');
-  await holdE(page, 2500);
+  await doStep(page, 'r2', 'MAINT');
+  expect(await rackState(page, 'r2')).toBe('FW-ISO/1');
   expect((await stats(page))?.wrongSteps).toBe(1);
 
   const info = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).renderInfo());
@@ -132,37 +150,103 @@ test('every patch applied and nothing broken: a clean shift', async ({ page }) =
   expect(patches).toHaveLength(3);
   for (const p of patches) {
     await face(page, p.targetId);
-    await holdE(page, (SHOOTER_TUNING.patchSeconds + 0.5) * 1000);
-  }
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        (window.__oncallShooter as ShooterHooks).patches().every((p) => p.applied),
+    await holdUntil(page, () =>
+      page.evaluate(
+        (id) =>
+          !!(window.__oncallShooter as ShooterHooks).patches().find((x) => x.id === id)?.applied,
+        p.id,
       ),
-    )
-    .toBe(true);
+    );
+  }
   await expect(page.locator('.zd-patch.applied')).toHaveCount(3);
 
-  // Fix whatever broke meanwhile, by its runbook.
-  for (let guard = 0; guard < 40; guard++) {
-    const open = await page.evaluate(() => (window.__oncallShooter as ShooterHooks).openTickets());
-    const t = open[0];
-    if (!t) break;
-    if (t.next === null) continue;
-    await face(page, t.rackId);
-    await doStep(page, t.next);
+  // Fix whatever broke meanwhile, by its runbook. The check for no open
+  // ticket and the jump of the clock run in one evaluate, so no break can
+  // land between them.
+  let done = false;
+  for (let guard = 0; guard < 60 && !done; guard++) {
+    const next = await page.evaluate(() => {
+      const h = window.__oncallShooter as ShooterHooks;
+      const t = h.openTickets()[0];
+      if (t) return t;
+      h.setClockLeft?.(1);
+      return null;
+    });
+    if (next === null) {
+      done = true;
+      break;
+    }
+    if (next.next === null) continue;
+    await face(page, next.rackId);
+    await doStep(page, next.rackId, next.next);
   }
-  expect(await page.evaluate(() => (window.__oncallShooter as ShooterHooks).openTickets())).toEqual(
-    [],
-  );
-
-  await page.evaluate(() => (window.__oncallShooter as ShooterHooks).setClockLeft?.(1));
+  expect(done).toBe(true);
   await expect
     .poll(() => page.evaluate(() => (window.__oncallShooter as ShooterHooks).ending()), {
       timeout: 10_000,
     })
     .toBe('clean');
   await expect(page.locator('.zd-end-title')).toHaveText('Clean shift');
+  expect(errors).toEqual([]);
+});
+
+test('a lost mouse lock pauses, and a blur or a hidden tab after it does not resume', async ({
+  page,
+}) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  // The lock ends (Esc in the browser), then the window loses focus.
+  await fakeLock(page, true);
+  await twoFrames(page);
+  // In one task, so no frame runs between the lost lock and the blur.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => null });
+    document.dispatchEvent(new Event('pointerlockchange'));
+    window.dispatchEvent(new Event('blur'));
+  });
+  await twoFrames(page);
+  await twoFrames(page);
+  expect(await screen(page)).toBe('paused');
+
+  // Again, with a hidden tab instead of a blur.
+  await page.locator('.zd-pause .menu-item', { hasText: 'Resume' }).click();
+  await expect.poll(() => screen(page)).toBe('playing');
+  await fakeLock(page, true);
+  await twoFrames(page);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => null });
+    document.dispatchEvent(new Event('pointerlockchange'));
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await twoFrames(page);
+  await twoFrames(page);
+  expect(await screen(page)).toBe('paused');
+  expect(errors).toEqual([]);
+});
+
+test('a lock granted after the shift paused is given back', async ({ page }) => {
+  const errors = trackErrors(page);
+  await open(page);
+  await start(page);
+  await page.keyboard.press('KeyP');
+  await expect.poll(() => screen(page)).toBe('paused');
+  await page.evaluate(() => {
+    const w = window as unknown as { exits: number };
+    w.exits = 0;
+    document.exitPointerLock = () => {
+      w.exits += 1;
+    };
+  });
+  // A lock asked for before the pause lands late.
+  await fakeLock(page, true);
+  await twoFrames(page);
+  expect(await page.evaluate(() => (window as unknown as { exits: number }).exits)).toBeGreaterThan(
+    0,
+  );
+  expect(await screen(page)).toBe('paused');
   expect(errors).toEqual([]);
 });
 

@@ -5,7 +5,7 @@ import { applyStep, issueTicket, type Ticket } from '../../logic/ticket';
 import { breakTimes, shooterSla } from './breaks';
 import { FLOOR, solidBoxes, type Box, type FloorDef, type Target } from './floor';
 import { rollPatches, type Patch } from './patches';
-import { NO_MOVE, stepPlayer, type MoveInput, type Player } from './player';
+import { stepPlayer, type MoveInput, type Player } from './player';
 import { SHOOTER_TUNING } from './tuning';
 
 /** The steps on the rack panel. Number key n picks PANEL_STEPS[n - 1]. */
@@ -29,6 +29,12 @@ export interface Work {
   duration: number;
 }
 
+/** A pick belongs to one rack: it never starts work at another. */
+export interface Pick {
+  rackId: string;
+  step: Step;
+}
+
 export interface ShiftStats {
   ticketsClosed: number;
   slaBreaches: number;
@@ -43,8 +49,8 @@ export interface Shift {
   player: Player;
   open: OpenTicket[];
   patches: Patch[];
-  /** The step picked on the rack panel. */
-  selected: Step | null;
+  /** The step picked on the rack panel, bound to the rack it was picked at. */
+  selected: Pick | null;
   work: Work | null;
   stats: ShiftStats;
   ended: Ending | null;
@@ -163,38 +169,58 @@ function distanceToBox(x: number, z: number, b: Box): number {
   return Math.hypot(dx, dz);
 }
 
+/** The cosine of the angle between the view and a target's front face, or null when it is out of reach, behind or outside the cone. */
+function faceScore(s: Shift, t: Target): number | null {
+  const p = s.player;
+  if (distanceToBox(p.x, p.z, t.box) > SHOOTER_TUNING.reach) return null;
+  const half = t.fx !== 0 ? (t.box.maxX - t.box.minX) / 2 : (t.box.maxZ - t.box.minZ) / 2;
+  const faceX = t.x + t.fx * half;
+  const faceZ = t.z + t.fz * half;
+  // The player stands on the front side of the face.
+  if ((p.x - faceX) * t.fx + (p.z - faceZ) * t.fz <= 0) return null;
+  const tx = faceX - p.x;
+  const tz = faceZ - p.z;
+  const len = Math.hypot(tx, tz);
+  if (len === 0) return null;
+  const c = (tx * -Math.sin(p.yaw) + tz * -Math.cos(p.yaw)) / len;
+  return c < Math.cos((SHOOTER_TUNING.faceAngleDeg * Math.PI) / 180) ? null : c;
+}
+
+/** The target still needs work: a broken rack, or a patch target not yet patched. */
+const needsWork = (s: Shift, id: string) => !!openAt(s, id) || !!unappliedAt(s, id);
+
 /**
  * The broken rack or unapplied patch target the player works on: within
  * reach, in front of its face, and within faceAngleDeg of the view. Of
  * several, the one nearest the center of the view.
  */
 export function facingTarget(s: Shift): Target | null {
-  const p = s.player;
-  const vx = -Math.sin(p.yaw);
-  const vz = -Math.cos(p.yaw);
-  const cosLimit = Math.cos((SHOOTER_TUNING.faceAngleDeg * Math.PI) / 180);
   let best: Target | null = null;
   let bestCos = -Infinity;
   const consider = (t: Target | undefined) => {
     if (!t) return;
-    if (distanceToBox(p.x, p.z, t.box) > SHOOTER_TUNING.reach) return;
-    const half = t.fx !== 0 ? (t.box.maxX - t.box.minX) / 2 : (t.box.maxZ - t.box.minZ) / 2;
-    const faceX = t.x + t.fx * half;
-    const faceZ = t.z + t.fz * half;
-    // The player stands on the front side of the face.
-    if ((p.x - faceX) * t.fx + (p.z - faceZ) * t.fz <= 0) return;
-    const tx = faceX - p.x;
-    const tz = faceZ - p.z;
-    const len = Math.hypot(tx, tz);
-    if (len === 0) return;
-    const c = (tx * vx + tz * vz) / len;
-    if (c < cosLimit || c <= bestCos) return;
+    const c = faceScore(s, t);
+    if (c === null || c <= bestCos) return;
     best = t;
     bestCos = c;
   };
   for (const o of s.open) consider(s.targets.get(o.rackId));
   for (const patch of s.patches) if (!patch.applied) consider(s.targets.get(patch.targetId));
   return best;
+}
+
+/**
+ * The target the player works on now. Work in progress keeps its target
+ * while that target stays in reach and in the cone, even if another one
+ * comes nearer the view center; otherwise, facingTarget.
+ */
+export function workTarget(s: Shift): Target | null {
+  const w = s.work;
+  if (w) {
+    const t = s.targets.get(w.targetId);
+    if (t && needsWork(s, t.id) && faceScore(s, t) !== null) return t;
+  }
+  return facingTarget(s);
 }
 
 /** Clean: every patch and no broken rack. Rough: every patch, a rack still broken. Fired: a patch missed. */
@@ -238,9 +264,10 @@ function complete(s: Shift, w: Work, events: ShiftEvent[]): void {
 function workFor(s: Shift, t: Target): Work | null {
   const T = SHOOTER_TUNING;
   if (openAt(s, t.id)) {
-    if (s.selected === null) return null;
-    const duration = s.selected === 'PIT' ? T.handsOnSeconds : T.opSeconds;
-    return { targetId: t.id, step: s.selected, progress: 0, duration };
+    const sel = s.selected;
+    if (sel === null || sel.rackId !== t.id) return null;
+    const duration = sel.step === 'PIT' ? T.handsOnSeconds : T.opSeconds;
+    return { targetId: t.id, step: sel.step, progress: 0, duration };
   }
   if (unappliedAt(s, t.id)) {
     return { targetId: t.id, step: null, progress: 0, duration: T.patchSeconds };
@@ -256,18 +283,21 @@ export function stepShift(s: Shift, input: ShiftInput, dt: number): ShiftEvent[]
   s.player.yaw = input.yaw;
   s.player.pitch = input.pitch;
 
-  if (input.pick !== null) s.selected = input.pick;
-
   // Work: hold E, stand still, face the target. Anything else cancels it.
   const moving = input.move.forward !== 0 || input.move.strafe !== 0;
-  const facing = facingTarget(s);
+  const facing = workTarget(s);
+  // A pick binds to the broken rack in view. Facing another target drops it.
+  if (facing && s.selected && s.selected.rackId !== facing.id) s.selected = null;
+  if (input.pick !== null && facing && openAt(s, facing.id)) {
+    s.selected = { rackId: facing.id, step: input.pick };
+  }
   const w = s.work;
   if (w) {
     const stillOn =
       input.work &&
       !moving &&
       facing?.id === w.targetId &&
-      (w.step === null || w.step === s.selected);
+      (w.step === null || w.step === s.selected?.step);
     if (!stillOn) {
       s.work = null;
       events.push({ type: 'work-cancelled', targetId: w.targetId });
@@ -276,11 +306,13 @@ export function stepShift(s: Shift, input: ShiftInput, dt: number): ShiftEvent[]
   if (!s.work && input.work && !moving && facing) s.work = workFor(s, facing);
   if (s.work) {
     s.work.progress += dt;
+    // Feet planted: speed left over from walking does not carry the player off.
+    s.player.vx = 0;
+    s.player.vz = 0;
     if (s.work.progress >= s.work.duration - EPS) complete(s, s.work, events);
+  } else {
+    stepPlayer(s.player, input.move, dt, s.boxes);
   }
-
-  // Movement: none while working.
-  stepPlayer(s.player, s.work ? NO_MOVE : input.move, dt, s.boxes);
 
   for (const o of s.open) {
     if (!o.breached && s.time >= o.ticket.deadline - EPS) {
